@@ -36,40 +36,38 @@ jobs:
         run: |
           npm ci 2>&1 | Tee-Object ../../../evidence/npm-ci.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: UI tests
+      - name: UI tests and build
         if: always()
         working-directory: source/ui/diagnostic
         shell: pwsh
         run: |
           npm test 2>&1 | Tee-Object ../../../evidence/ui-tests.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build 2>&1 | Tee-Object ../../../evidence/ui-build.log
           exit $LASTEXITCODE
-      - name: UI build
-        if: always()
+      - name: Pinned Astryx component contracts
         working-directory: source/ui/diagnostic
         shell: pwsh
         run: |
-          npm run build 2>&1 | Tee-Object ../../../evidence/ui-build.log
-          exit $LASTEXITCODE
-      - name: Native host Release build
+          npm run astryx -- component Button 2>&1 | Tee-Object ../../../evidence/astryx-button.txt
+          npm run astryx -- component IconButton 2>&1 | Tee-Object ../../../evidence/astryx-icon-button.txt
+      - name: Native host and fixture builds
         if: always()
         working-directory: source
         shell: pwsh
         run: |
           dotnet build host/NeoBabylon.Host/NeoBabylon.Host.csproj -c Release 2>&1 | Tee-Object ../evidence/host-build.log
-          exit $LASTEXITCODE
-      - name: Native fixture build
-        if: always()
-        working-directory: source
-        shell: pwsh
-        run: |
-          dotnet build tests/host/NeoBabylon.Host.Tests.csproj -c ApprovalQA 2>&1 | Tee-Object ../evidence/host-fixture-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA 2>&1 | Tee-Object ../evidence/host-fixture-build.log
           exit $LASTEXITCODE
       - name: Pure protocol and protected binding checks
         if: always()
         working-directory: source
         shell: pwsh
         run: |
-          dotnet run --no-build --project tests/host/NeoBabylon.Host.Tests.csproj -c ApprovalQA -- --probe-rename-saved-thread 2>&1 | Tee-Object ../evidence/rename-capability-tests.log
+          dotnet run --no-build --project tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA -- --probe-rename-saved-thread 2>&1 | Tee-Object ../evidence/rename-capability-tests.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --no-build --project tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA -- --probe-development-credential-records 2>&1 | Tee-Object ../evidence/development-credentials-tests.log
           exit $LASTEXITCODE
       - name: Adapter bundle checks
         if: always()
@@ -78,13 +76,18 @@ jobs:
         run: |
           node --test tests/qa/nvidia-adapter-bundle.test.mjs 2>&1 | Tee-Object ../evidence/adapter-bundle-tests.log
           exit $LASTEXITCODE
-      - name: Test run-root checks
+      - name: Synthetic Edge UI acceptance
         if: always()
         working-directory: source
         shell: pwsh
         run: |
-          node --test tests/qa/qa-run-root.test.mjs 2>&1 | Tee-Object ../evidence/qa-run-root-tests.log
-          exit $LASTEXITCODE
+          npm install --prefix ../review-tools --ignore-scripts --no-audit --no-fund playwright-core@1.56.0 2>&1 | Tee-Object ../evidence/browser-tools.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force .local/Lab/Runs | Out-Null
+          node tests/qa/ui-accessibility.mjs "$env:GITHUB_WORKSPACE/review-tools/node_modules/playwright-core/index.mjs" 2>&1 | Tee-Object ../evidence/ui-accessibility.log
+          $result = $LASTEXITCODE
+          Get-ChildItem .local/Lab/Runs -Recurse -File | Where-Object { $_.Extension -in '.json','.png','.txt' } | ForEach-Object { Copy-Item $_.FullName ../evidence/ -Force }
+          exit $result
       - name: Environment versions
         if: always()
         shell: pwsh
