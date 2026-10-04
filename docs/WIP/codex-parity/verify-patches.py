@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Check/apply each declared patch combination in disposable detached worktrees.
+"""Check/apply/reverse declared patch combinations in disposable detached worktrees.
 
-Run from any location: python docs/WIP/codex-parity/verify-patches.py
 Requires Git and the exact reviewed base object. Never applies to the caller's tree.
 """
 from __future__ import annotations
-
 import argparse
 import hashlib
 import json
@@ -14,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 BASE = "f126612a00231a58626d72108aac6ee912431ee3"
-DEPENDENCIES = {"001": [], "002": [], "003": ["002"], "004": [], "005": ["004"], "006": [], "007": []}
+DEPENDENCIES = {"001": [], "002": [], "003": ["002"], "004": [], "005": ["004"], "006": [], "007": [], "008": []}
 
 
 def run(args: list[str], cwd: Path) -> str:
@@ -33,6 +31,9 @@ def main() -> int:
     patches = {p.name[:3]: p.resolve() for p in sorted((repository / "patches/codex-parity").glob("[0-9][0-9][0-9]-*.patch"))}
     if patches.keys() != DEPENDENCIES.keys():
         raise RuntimeError("Patch series does not match the reviewed dependency manifest.")
+    for patch in patches.values():
+        if b"\r\n" in patch.read_bytes():
+            raise RuntimeError(f"{patch.name}: patches require LF; check the nested .gitattributes before checking out the package.")
     if run(["git", "rev-parse", BASE + "^{commit}"], repository) != BASE:
         raise RuntimeError("Exact reviewed base is unavailable; fetch it explicitly.")
     evidence = {"sourceCommit": BASE, "checks": [], "patches": [

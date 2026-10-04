@@ -1,0 +1,91 @@
+diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
+index c24f9d1..8a4c211 100644
+--- a/ui/diagnostic/src/App.tsx
++++ b/ui/diagnostic/src/App.tsx
+@@ -5,7 +5,7 @@ import { listenToHost, requestHost, type HostNotification, type HostOperation }
+ import { appendAssistantDelta, boundTranscript, finishAssistantStreams, markAssistantTurnFailed, projectDisplayText, upsertAssistantMessage, type ChatMessage, type DisplayMetadata } from "./transcript.mjs";
+ import { boundActivityHistory, type ActivityHistoryEntry } from "./activity-history.mjs";
+ import { matchesLateCommandCompletion, mayStopCommand, requestCommandStop } from "./command-stop.mjs";
+-import { createAssistantDeltaBatcher, type AssistantDeltaBatcher } from "./stream-batcher.mjs";
++import { assistantDeltaText, createAssistantDeltaBatcher, type AssistantDeltaBatcher } from "./stream-batcher.mjs";
+ import { filterSavedThreads, mergeHistoryPages, savedHistoryState, savedThreadLabel, savedThreadSearchEmptyMessage, savedThreadUpdatedAt } from "./history.mjs";
+ import { classifyActivityOutcome, createLiveTurnStatusMessage, resolveLiveTurnState, restoreSavedActivities, restoreTurnOutcome, restoreVisibleTranscript } from "./restoration.mjs";
+ import { approvalPresentation, invalidateApprovalReview } from "./approvals.mjs";
+@@ -1562,7 +1562,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+       lateCommandBindingsRef.current.delete(commandIdentityKey(notificationThreadId, notificationTurnId, itemId));
+     }
+     if (method === "item/agentMessage/delta" || method === "item/assistantMessage/delta") {
+-      const delta = textValue(field(params, "delta"));
++      const delta = assistantDeltaText(field(params, "delta"));
+       if (delta) {
+         const id = textValue(field(params, "itemId")) ?? "assistant-current";
+         const displayMetadata = recordValue(field(params, "neoBabylonDisplay")) as DisplayMetadata | undefined;
+diff --git a/ui/diagnostic/src/stream-batcher.d.mts b/ui/diagnostic/src/stream-batcher.d.mts
+index c946b67..3c23511 100644
+--- a/ui/diagnostic/src/stream-batcher.d.mts
++++ b/ui/diagnostic/src/stream-batcher.d.mts
+@@ -1,3 +1,5 @@
++export function assistantDeltaText(value: unknown): string | undefined;
++
+ export type AssistantDisplayMetadata = {
+   displayTruncated?: boolean;
+   omittedCharacters?: number;
+diff --git a/ui/diagnostic/src/stream-batcher.mjs b/ui/diagnostic/src/stream-batcher.mjs
+index 697cbfa..7e7f5c0 100644
+--- a/ui/diagnostic/src/stream-batcher.mjs
++++ b/ui/diagnostic/src/stream-batcher.mjs
+@@ -1,3 +1,8 @@
++// Stream chunks are content, not labels: whitespace is meaningful.
++export function assistantDeltaText(value) {
++  return typeof value === "string" && value.length > 0 ? value : undefined;
++}
++
+ export function createAssistantDeltaBatcher({ schedule, cancel, onBatch, delayMs = 200 }) {
+   const pending = new Map();
+   let timer = null;
+diff --git a/ui/diagnostic/tests/stream-whitespace.test.mjs b/ui/diagnostic/tests/stream-whitespace.test.mjs
+new file mode 100644
+index 0000000..b6a4d22
+--- /dev/null
++++ b/ui/diagnostic/tests/stream-whitespace.test.mjs
+@@ -0,0 +1,40 @@
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import test from "node:test";
++import * as streaming from "../src/stream-batcher.mjs";
++
++test("assistant delta admission retains whitespace, but rejects empty and non-text values", () => {
++  assert.equal(typeof streaming.assistantDeltaText, "function", "stream payloads need a lossless text admission function");
++  for (const value of [" ", "\n", "\r\n", "\t", "  indented", "answer"]) {
++    assert.equal(streaming.assistantDeltaText(value), value);
++  }
++  for (const value of ["", null, undefined, 0, false, {}, ["text"]]) {
++    assert.equal(streaming.assistantDeltaText(value), undefined);
++  }
++});
++
++test("an interrupted stream preserves word separators, newlines and indentation", () => {
++  assert.equal(typeof streaming.assistantDeltaText, "function");
++  const batches = [];
++  const batcher = streaming.createAssistantDeltaBatcher({
++    schedule: () => 1, cancel: () => {}, onBatch: (batch) => batches.push(batch),
++  });
++  for (const raw of ["Hello", " ", "world", "\n", "\t", "return", " ", "42;"]) {
++    const delta = streaming.assistantDeltaText(raw);
++    if (delta !== undefined) batcher.push("assistant-1", delta);
++  }
++  // A failed/interrupted turn has no authoritative completed message to repair it.
++  batcher.flush();
++  batcher.clear();
++  assert.deepEqual(batches, [[{ id: "assistant-1", delta: "Hello world\n\treturn 42;" }]]);
++});
++
++test("both assistant notification aliases use lossless admission in the actual UI handler", () => {
++  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
++  const start = source.indexOf('if (method === "item/agentMessage/delta" || method === "item/assistantMessage/delta")');
++  assert.ok(start >= 0, "assistant event branch must remain present");
++  const branch = source.slice(start, source.indexOf("return;", start));
++  assert.match(branch, /const delta = assistantDeltaText\(field\(params, "delta"\)\)/);
++  assert.doesNotMatch(branch, /textValue\(field\(params, "delta"\)\)/);
++  assert.match(branch, /\.push\(id, delta, displayMetadata\)/);
++});

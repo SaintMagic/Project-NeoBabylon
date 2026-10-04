@@ -1,0 +1,2 @@
+# Unified patches must retain LF even when product source checks out as CRLF.
+*.patch text eol=lf
