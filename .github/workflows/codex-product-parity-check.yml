@@ -1,0 +1,177 @@
+name: Codex product parity patch checks
+
+on:
+  push:
+    branches: [review/codex-product-parity-2026-10-04]
+    paths: [.github/workflows/codex-product-parity-check.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-checks:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Fetch isolated review branch and exact base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = review/codex-product-parity-2026-10-04
+          git init review
+          git -C review config core.autocrlf false
+          git -C review remote add origin https://github.com/SaintMagic/Project-NeoBabylon.git
+          git -C review fetch origin "$GITHUB_SHA" f126612a00231a58626d72108aac6ee912431ee3
+          git -C review checkout -b review/codex-product-parity-2026-10-04 "$GITHUB_SHA"
+          mkdir evidence
+      - name: Materialize exact patch files and remove temporary transport
+        working-directory: review
+        shell: python
+        run: |
+          import base64, gzip, hashlib, json
+          from pathlib import Path, PurePosixPath
+          parts = sorted(Path('.github/parity-transfer').glob('part-*.b64'))
+          if parts:
+              assert len(parts) == 4
+              raw = gzip.decompress(base64.b64decode(''.join(p.read_text().strip() for p in parts), validate=True))
+              assert hashlib.sha256(raw).hexdigest() == '057d41c2ca6ce83471d0daacb7cb68f45938b35b3bec19be69ffadb6be2e22e5'
+              files = json.loads(raw)
+              assert len(files) == 9
+              for name, content in files.items():
+                  p = PurePosixPath(name)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert name.startswith(('patches/codex-parity/', 'docs/WIP/codex-parity/evidence/')) and name.endswith('.patch')
+                  target = Path(name)
+                  assert not target.exists(), name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(content.encode('utf-8'))
+              for part in parts: part.unlink()
+      - name: Retain the unapplied patches on the review branch only
+        working-directory: review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'NeoBabylon review automation'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add patches/codex-parity docs/WIP/codex-parity/evidence .github/parity-transfer
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs(review): retain seven atomic patches and regression fixtures'
+            auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin HEAD:refs/heads/review/codex-product-parity-2026-10-04
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.x'
+      - name: Independent dependency combinations and exact reverse checks
+        working-directory: review
+        shell: pwsh
+        run: |
+          python docs/WIP/codex-parity/verify-patches.py --output ../evidence/patch-verification.json 2>&1 | Tee-Object ../evidence/patch-verification.log
+          exit $LASTEXITCODE
+      - name: Regression checks fail against unpatched behavior
+        working-directory: review
+        shell: python
+        run: |
+          import pathlib, subprocess
+          root = pathlib.Path.cwd()
+          evidence = root.parent / 'evidence'
+          base = 'f126612a00231a58626d72108aac6ee912431ee3'
+          for number, expected in [('002', '3/6 passed'), ('003', '6/11 passed')]:
+              target = root.parent / ('red-' + number)
+              subprocess.run(['git','worktree','add','--detach',str(target),base], check=True)
+              if number == '003':
+                  patch = next((root/'patches/codex-parity').glob('002-*.patch'))
+                  subprocess.run(['git','apply',str(patch)],cwd=target,check=True)
+              subprocess.run(['git','apply',str(root/'docs/WIP/codex-parity/evidence'/f'{number}-red-tests.patch')],cwd=target,check=True)
+              process = subprocess.run(['dotnet','run','--project','tests/product-parity/NeoBabylon.ProductParity.Tests.csproj','-c','Release'],cwd=target,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
+              (evidence/f'{number}-red.log').write_text(process.stdout,encoding='utf-8')
+              assert process.returncode != 0 and expected in process.stdout, process.stdout
+              print(f'PASS {number}: expected behavioral regression failure observed')
+      - name: Apply cumulative series in disposable source worktree
+        working-directory: review
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+          root = Path.cwd()
+          target = root.parent / 'source'
+          subprocess.run(['git','worktree','add','--detach',str(target),'f126612a00231a58626d72108aac6ee912431ee3'],check=True)
+          for patch in sorted((root/'patches/codex-parity').glob('*.patch')):
+              subprocess.run(['git','apply','--check',str(patch)],cwd=target,check=True)
+              subprocess.run(['git','apply',str(patch)],cwd=target,check=True)
+      - name: UI tests and production build
+        if: always()
+        working-directory: source/ui/diagnostic
+        shell: pwsh
+        run: |
+          npm ci 2>&1 | Tee-Object ../../../evidence/patched-npm-ci.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test 2>&1 | Tee-Object ../../../evidence/patched-ui-tests.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build 2>&1 | Tee-Object ../../../evidence/patched-ui-build.log
+          exit $LASTEXITCODE
+      - name: Source-only product regressions
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet run --project tests/product-parity/NeoBabylon.ProductParity.Tests.csproj -c Release 2>&1 | Tee-Object ../evidence/patched-product-tests.log
+          exit $LASTEXITCODE
+      - name: Native host and test harness build
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet build host/NeoBabylon.Host/NeoBabylon.Host.csproj -c Release 2>&1 | Tee-Object ../evidence/patched-host-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA 2>&1 | Tee-Object ../evidence/patched-host-fixture-build.log
+          exit $LASTEXITCODE
+      - name: Existing exact-identity and synthetic credential probes
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          dotnet run --no-build --project tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA -- --probe-rename-saved-thread 2>&1 | Tee-Object ../evidence/patched-rename-capability.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --no-build --project tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA -- --probe-development-credential-records 2>&1 | Tee-Object ../evidence/patched-credentials.log
+          exit $LASTEXITCODE
+      - name: Adapter bundle and Windows QA path checks
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          node --test tests/qa/nvidia-adapter-bundle.test.mjs tests/qa/qa-run-root.test.mjs 2>&1 | Tee-Object ../evidence/patched-qa-tests.log
+          exit $LASTEXITCODE
+      - name: Synthetic browser flows and new layout-copy checks
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          npm install --prefix ../review-tools --ignore-scripts --no-audit --no-fund playwright-core@1.56.0 2>&1 | Tee-Object ../evidence/patched-browser-tools.log
+          New-Item -ItemType Directory -Force .local/Lab/Runs | Out-Null
+          node tests/qa/ui-accessibility.mjs "$env:GITHUB_WORKSPACE/review-tools/node_modules/playwright-core/index.mjs" --product-parity 2>&1 | Tee-Object ../evidence/patched-ui-accessibility.log
+          $result = $LASTEXITCODE
+          Get-ChildItem .local/Lab/Runs -Recurse -File | Where-Object { $_.Extension -in '.json','.png','.txt' } | ForEach-Object { Copy-Item $_.FullName ../evidence/ -Force }
+          exit $result
+      - name: Environment and changed-source evidence
+        if: always()
+        working-directory: source
+        shell: pwsh
+        run: |
+          node --version | Out-File ../evidence/environment.txt
+          npm --version | Out-File ../evidence/environment.txt -Append
+          dotnet --info | Out-File ../evidence/environment.txt -Append
+          git diff --stat | Out-File ../evidence/patched-source-diff.txt
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: neobabylon-patch-verification
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: error
