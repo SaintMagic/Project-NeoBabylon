@@ -1,198 +1,122 @@
-# NeoBabylon: Codex product-completeness review
+# NeoBabylon — Codex product-completeness review
 
-Reviewed: 2026-10-04. Source: `f126612a00231a58626d72108aac6ee912431ee3`.
+Reviewed 2026-10-04 against `f126612a00231a58626d72108aac6ee912431ee3`.
 
-This is a review and an unapplied implementation package, not a product release or a runtime/provider qualification. Product source on this review branch remains the reviewed source; proposed code is in `patches/codex-parity`. The implementation order, patch catalog, specifications and verification record are linked below.
+This is an unapplied implementation package, not a release or live runtime qualification. Product source and `main` remain unchanged. The review branch contains eight atomic patches, nine larger implementation specifications, and reproducible verification tooling.
 
-- [Implementation order](CODEX_PARITY_IMPLEMENTATION_ORDER.md)
-- [Patch catalog](../../patches/codex-parity/README.md)
-- [Specification index](codex-parity/README.md)
-- [Verification and limitations](codex-parity/VERIFICATION.md)
+[Implementation order](CODEX_PARITY_IMPLEMENTATION_ORDER.md) · [Patch catalog](../../patches/codex-parity/README.md) · [Specifications](codex-parity/SPECIFICATIONS.md) · [Verification](codex-parity/VERIFICATION.md) · [Current Codex sources](codex-parity/CODEX_SOURCES.md)
 
-## Executive assessment
+## Assessment
 
-NeoBabylon is materially further along than a chat mock-up. It already has a supervised runtime, an intentionally explicit authority boundary, saved conversations, exact model identity, same-conversation model switching, recovery records, streamed output, compaction, command stopping, and substantial pure state-machine tests. Replacing this architecture would discard useful work.
+The repository is substantially more capable than a chat mock-up. It already has supervised local execution, exact provider/model selection, same-conversation model switching, saved conversations, restoration, compaction, command stopping, protected records and a considerable state-machine test suite. Its main shortcoming is product integration: the settings surface, input/content pipeline and provider lifecycle do not yet expose the capabilities needed for a complete everyday desktop agent.
 
-The remaining distance to “Codex, but mine” is concentrated at the product boundaries: editable behavior, usable conversation content, attachments, provider capability administration, and reliable continuation across process lifetimes. Several capabilities are present below the UI but have no complete host-to-renderer path. The most obvious example is reasoning: an adapter can emit provider-native reasoning, but the application does not preserve and render a reasoning timeline. Reasoning effort and token counters are not a reasoning viewer.
+The right first move is to finish this architecture, not replace it. Apply the bounded projection/streaming/UI fixes, establish host-owned editable settings and instructions, and make conversation content survive the complete send/stream/save/reopen path. Exact NVIDIA replay persistence is a parallel correctness priority. Do not begin with a universal desktop tool catalog or a new agent framework.
 
-The first implementation batch should apply the seven bounded corrections/enhancements in this package, then finish settings/instruction ownership and the conversation-content pipeline. Durable NVIDIA replay is a parallel correctness priority before promising restart-safe conversations for the affected provider/model. Do not start by implementing a universal desktop automation catalog or replacing the runtime.
+No newly discovered Critical issue is claimed. Important means a material gap or defect affecting the requested product. Moderate means meaningful ergonomics or test reliability. Optional means useful later work, not a release blocker invented from personal preference.
 
-No newly discovered Critical defect is claimed. Important findings below materially affect intended use; Moderate findings affect clarity, ergonomics or confidence in testing. Accepted unrestricted execution is high consequence, but it is an explicit existing decision, not a newly discovered hidden sandbox vulnerability.
+## Scope and provenance
 
-## Scope, provenance and limits
+The full published snapshot was recovered through GitHub and all 303 source blobs checked against the pinned Git tree. Source, tests, architecture, decisions, protocol instructions and current WIP were examined. Review artifacts from an interrupted earlier attempt on the same review branch were recovered and completed rather than duplicated. Detached worktrees were used for patch validation; the exact upstream base commit was also reconstructed and checked locally. Windows CI independently fetched that actual commit.
 
-The review used the complete public Git snapshot, including product source, tests, protocol artifacts, architecture, decision records, current WIP and relevant recent history. The 303 tracked source blobs were checked against the exact Git tree. A separate local snapshot repository and detached worktrees were used for patch construction. A synthetic local snapshot commit is not the upstream source revision. Windows CI fetched the real source commit and tested the patches against that commit directly.
+This is not a claim of line-by-line certification of every historical document. There was no access to an uncommitted checkout on Martin's computer, personal files, work applications, real credentials or the private runtime checkout. Historical qualification reports are historical evidence, not tests rerun here.
 
-There is no access in this review to an uncommitted working tree on Martin's computer. The private Codex-derived runtime repository, locked executable, Node deployment, real credentials, personal files and installed applications were not supplied by this public repository. None were substituted. The review did not operate Martin's desktop or call a live model.
-
-`runtime/runtime-lock.json` identifies runtime version 0.155.1, upstream revision `be2951ea34f0d295ed0becf97079f92fa5f6950e`, and the private locked binary SHA-256 `a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386`. The binary path is `.local/Runtime/LockedBuild/20261003-a0c3ebdc/codex-app-server.exe`. Its absence limits runtime qualification; it does not prevent source-only builds and tests. Historical live evidence in the repository is not a live result from this review.
-
-This was a product-oriented engineering review, not an exhaustive security audit, a complete line-by-line audit of every historical document, or independent certification of all accepted qualification claims.
+`runtime/runtime-lock.json` pins version `0.155.1`, upstream revision `be2951ea34f0d295ed0becf97079f92fa5f6950e`, and private executable SHA-256 `a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386` at `.local/Runtime/LockedBuild/20261003-a0c3ebdc/codex-app-server.exe`. That executable, the private runtime source and its generated schema cache are not supplied by the public checkpoint. No upstream executable was substituted. Builds and synthetic tests are possible without it; exact native/runtime/provider qualification is not established by those tests.
 
 ## Decisions preserved
 
-The WPF/.NET + WebView2 host, React/TypeScript/Astryx renderer, named bridge, separately owned pinned App Server and application-root Data boundary remain intact. `RuntimeSupervisor` is in `host/NeoBabylon.Host`, not Core; Core owns reusable records, protocol and projections.
+Keep WPF/.NET + WebView2, React/TypeScript/Astryx, the named host bridge, the separately maintained pinned App Server and application-root Data ownership. `RuntimeSupervisor` belongs to Host; pure records and projections belong to Core.
 
-NB-DEC-005 places durable state under the application/install root's `Data`. NB-DEC-008 deliberately permits full Windows-user tool execution without containment. NB-DEC-012 makes persistent generated-tool activation a separate exact-identity host action; review, prepared-disabled binding and staging do not confer callability. Existing route/tuple qualification gates remain closed. NB-DEC-013 accepts switching the model in the same conversation and supersedes older next-task-only assumptions. NB-DEC-010 defers packaging. This package does not reopen those decisions.
+NB-DEC-005 defines durable application Data. NB-DEC-008 deliberately uses full logged-in Windows-user execution without containment. NB-DEC-012 keeps generated-tool review/preparation separate from explicit exact-identity activation; current route and qualification gates remain closed. NB-DEC-013 permits idle model switching in the same conversation. NB-DEC-010 defers packaging. This package does not reopen these choices, update the binary lock, enable fallback or touch the ordinary Codex home.
 
-Permission descriptions and prompt instructions cannot contain an arbitrary process running as the same unrestricted user. Completing scoped UX and agent policy is still useful, but must not be marketed as enforcement. No patch changes the authority policy, enables generated tools, updates the runtime lock, enables provider fallback, or writes to the ordinary Codex home.
+The user's three boundaries remain product requirements, but instructions cannot technically contain arbitrary same-user shell execution. The proposed scope/initiative work improves behavior and host-owned operations; it is not advertised as a security sandbox.
 
-## Confirmed current capabilities
+## Confirmed capabilities
 
-| Area | What is actually present | Important limit |
-| --- | --- | --- |
-| Desktop shell | Native WPF/WebView2 shell, local renderer, theme integration, keyboard and modal support | Development assembly, not an installable release |
-| Providers | LM Studio and OpenRouter capability paths; NVIDIA adapter; exact provider/model and route handling | No general in-app profile editor; compatibility is bounded, not universal |
-| Conversation history | Saved-thread listing, loaded-history search, pagination, resume, rename and whole-thread fork | Search is explicitly over loaded conversations; no polished full-history management |
-| Model switching | Host-confirmed exact same-thread selection, preserved draft/history, transition records | Requires idle boundary; cross-provider live repeatability remains to be qualified |
-| Restoration | Drafts, active-task bookmark, pending-submission reconciliation and protected-record recovery | Does not imply every adapter's private continuation state is durable |
-| Streaming | Assistant batching, bounded display projections, omission disclosures, saved output ranges | Visible content types are narrower than the underlying protocol |
-| Tools | Activity cards, command failures, output inspection, saved diff review, exact command stopping | Structured outputs and metadata are lost on some paths; cards are not an ordered timeline |
-| Context | Usage/context diagnostics, output cap controls and manual compaction tracking | Compaction acknowledgement is not completion; broader live qualification remains open |
-| Reasoning controls | Provider-aware effort options and usage metadata where known | No complete reasoning content viewer or restored reasoning stream |
-| Authority handling | Explicit full-access label, fail-closed unsupported requests and approval recovery | Not personal-file or system containment |
-| Generated tools | Candidate/review/prepared binding/history UI and explicit activation groundwork | Callability intentionally disabled pending accepted qualification |
-| Diagnostics | Runtime, capabilities, failures, protected records and usage evidence | Not a complete settings surface or end-to-end request trace |
+| Area | Already present | Limit that matters |
+|---|---|---|
+| Desktop | Native host, local renderer, appearance integration, keyboard/modal behavior | Source-development checkpoint, not an installer |
+| Providers | LM Studio/OpenRouter capability paths, NVIDIA adapter, exact model/route handling | Bounded compatibility; no general profile administration UI |
+| Conversations | Saved-thread list and pagination, search over loaded chats, resume, rename, whole-thread fork, new task | Older-turn navigation and comprehensive management remain limited |
+| Model changes | Host-confirmed idle same-chat switching and exact binding records | No proof here of every live cross-provider combination |
+| Recovery | Drafts, active-task bookmark, pending-send reconciliation and protected-record recovery | Does not make provider-private replay durable |
+| Streaming | Batching, bounded projections, omission notices and saved output ranges | Two concrete text/identity defects; narrow content types |
+| Tools | Activity cards, command failure/stop, output inspection and tracked-change review | Structured fields can be lost; cards are not chronologically interleaved |
+| Context | Usage display, output caps, reasoning effort and tracked manual compaction | Effort/tokens are not a reasoning-content viewer |
+| Generated tools | Candidate/review/prepared-disabled/history and activation groundwork | Callability intentionally unavailable pending accepted qualification |
+| Diagnostics | Runtime, capability, failure, recovery and usage evidence | Not application settings or a complete operation trace |
 
-Source anchors: `ui/diagnostic/src/App.tsx`; `bridge.ts`; `drafts.mjs`; `model-switch.mjs`; `restoration.mjs`; `transcript.mjs`; `context-compaction.mjs`; `host/NeoBabylon.Host/RuntimeSupervisor.cs`; `MainWindow.xaml.cs`; Core `ThreadCapabilityBindingStore`, `CapabilitySwitchSafety`, `ManualCompactionTracker`, `AppServerNotificationProjection`, `ProtectedDataRecordRecoveryService` and generated-tool classes. Some module names are best located through the source index rather than guessed from feature labels; use symbol search when implementing.
+Source anchors: `ui/diagnostic/src/App.tsx`, `bridge.ts`, `drafts.mjs`, `history.mjs`, `restoration.mjs`, `transcript.mjs`; `host/NeoBabylon.Host/RuntimeSupervisor.cs` and `MainWindow.xaml.cs`; Core `ThreadCapabilityBindingStore`, `CapabilitySwitchSafety`, `ManualCompactionTracker`, `AppServerNotificationProjection`, `ProtectedDataRecordFile` and generated-tool stores. The specifications name the exact files and proposed interfaces for each change.
 
 ## Findings and disposition
 
-| ID | Severity | Finding | Evidence classification | Disposition |
-| --- | --- | --- | --- | --- |
-| F01 | Important | Equal assistant text can collapse distinct explicit item identities; fallback IDs can overwrite earlier turns | Source + failing/passing regression | Patch 001 |
-| F02 | Important | Default agent instructions do not communicate task ownership or the requested three boundaries | Source + policy contract tests, not live model behavior | Patch 002; S001 makes behavior editable |
-| F03 | Important | Structured tool results/errors and dynamic content are dropped or escape display limits | Source + failing/passing Core regressions | Patch 003 |
-| F04 | Moderate | Large displays are held to a narrow fixed conversation width with no user preference | Source + layout preference tests; browser verification separately recorded | Patch 004 |
-| F05 | Moderate | Messages have no direct copy action or explicit preview-copy semantics | Source + clipboard tests | Patch 005 |
-| F06 | Moderate | Windows QA fixtures fail on short/long TEMP path aliases | Observed Windows test failures | Patch 006; production guards unchanged |
-| F07 | Moderate | Accessibility fixture selectors and identity responses lag current UI/bridge contracts | Observed selector/focus failure + source contract tracing | Patch 007 |
-| F08 | Important | No complete editable application settings/custom-instruction pipeline | Source confirmed | S001 |
-| F09 | Important | Conversation input is text-only across composer, bridge and host | Source confirmed | S002 |
-| F10 | Important | Provider reasoning is not preserved/rendered as conversation content | Source confirmed, provider data availability differs | S003 |
-| F11 | Important | Conversation text, tools and results are not a rich, ordered turn timeline | Source confirmed | S004 |
-| F12 | Important | Existing provider support lacks a first-class extensible profile/capability registry | Source confirmed | S005 |
-| F13 | Important | NVIDIA exact replay depends on process-local state and can disappear after restart/eviction | Source-confirmed persistence gap; no live endpoint reproduction | S006 |
-| F14 | Important | Long-running operation, transient failure, retry and steering behavior need a single user-facing lifecycle | Mixed: missing UX confirmed; specific event races require reproduction | S007 |
-| F15 | Important | Personal-file/system/trust boundaries lack enforceable scope in the unrestricted runtime | Accepted architecture limit, not new containment finding | S008; no authority redesign in this patch set |
-| F16 | Moderate | Diagnostics can report unfamiliar completed-item statuses as failure instead of unknown | Source-confirmed classification mismatch | S007 regression and typed outcomes |
-| F17 | Moderate | Hardcoded TODAY grouping and stale feature documentation obscure restored/current state | Source confirmed | S004 and documentation synchronization |
-| F18 | Optional | Request schema/token overhead and lazy tool discovery need measurement | Investigation item; no prompt-bloat defect asserted without private request evidence | S009 |
+| ID | Severity | Finding | Evidence / action |
+|---|---|---|---|
+| F01 | Important | Assistant projection can collapse distinct explicit item IDs with equal text or replace an earlier turn through fallback matching | Source and regression coverage; patch 001 |
+| F02 | Important | Compiled default instructions do not express ownership of authorized goals, routine prerequisites or the requested boundaries | Source and prompt-contract tests; patch 002, then S001 |
+| F03 | Important | Structured tool results/errors and dynamic content are lost or bypass text projection limits on different paths | Source and Core/UI regression coverage; patch 003 |
+| F04 | Moderate | Fixed narrow conversation/composer width wastes large displays; no explicit width preference | Source and layout tests; patch 004 |
+| F05 | Moderate | No direct message-copy action or truthful copy-preview semantics | Source and clipboard tests; patch 005 |
+| F06 | Moderate | QA temporary-path comparisons depend on Windows short/long path spelling | Test-fixture correction; patch 006, production guards unchanged |
+| F07 | Moderate | Accessibility fixtures lag exact identity, role, accessible-name and focus-order contracts | Reproduced Windows browser failures; patch 007 |
+| F08 | Important | No complete editable settings/instruction persistence-to-runtime pipeline | Source confirmed; S001 |
+| F09 | Important | Attachments are absent across composer, bridge, turn construction and saved transcript projection | Source confirmed; S002 |
+| F10 | Important | Exposed provider reasoning has no complete preserved/rendered conversation path | Source confirmed; availability differs by provider; S003 |
+| F11 | Important | Plain text plus a separate activity stack is not a rich chronological conversation | Source confirmed; S004 |
+| F12 | Important | Existing provider implementations lack first-class extensible profile/capability administration | Source confirmed; S005 |
+| F13 | Important | NVIDIA exact assistant replay is process-local and bounded; restart/eviction can remove required continuation data | Source-confirmed persistence limitation, not a live endpoint reproduction; S006 |
+| F14 | Important | Long-operation budgets, uncertain outcomes and busy-composer behavior need an integrated user-facing lifecycle | Missing UX/configuration confirmed; particular races require tests; S007 |
+| F15 | Important | Personal-file/system boundaries are not technically enforced against unrestricted model tools | Accepted architecture limit, not a newly discovered containment bypass; S008 |
+| F16 | Moderate | Unfamiliar completed-item statuses can become failure in terminal diagnostics rather than Unknown | Source-confirmed classification mismatch; S007 |
+| F17 | Moderate | Literal TODAY grouping and limited older-turn navigation misrepresent or constrain restored conversations | Source confirmed; S004 |
+| F18 | Optional | Actual tool-schema overhead and discovery efficiency are unmeasured in the private request builder | Investigation item, not an asserted prompt-bloat defect; S009 |
+| F19 | Important | Whitespace-only assistant deltas are discarded before batching | Reproduced red/green tests and actual handler wiring; patch 008 |
 
-### F01: preserve identity, not text coincidence
+### Projection and streaming correctness: F01, F03, F19
 
-`transcript.mjs` previously used the last streaming/global fallback ID and equal-text deduplication without consistently respecting explicit item IDs and turn boundaries. Two different assistant items containing the same text are not necessarily duplicate events. A completion without an ID after a new user turn must not replace an older assistant entry. Patch 001 preserves explicit identity and confines fallback matching to the current tail with compatible known thread/turn identity. Repeated completion of the same item remains idempotent. This changes the UI projection, not the runtime journal.
+`transcript.mjs` uses explicit and fallback assistant identities. Equal text is not sufficient evidence of duplicate events: two different assistant items may legitimately say the same thing. Patch 001 retains explicit identity and confines fallback matching to the compatible current turn/tail. It changes a display projection, not the App Server journal.
 
-### F02/F08: customization must reach the runtime
+The baseline tool paths disagree about output precedence and types. A result/error object may escape a string-only cap in `AppServerNotificationProjection`, then disappear when another reader asks for a string. Patch 003 introduces display-only `ToolOutputText`, preserves structured/dynamic outputs, explicit unsuccessful results, exit code and duration, and aligns live, saved and range-read views. It does not promise an arbitrary-size RPC memory bound or use bounded display text for provider replay.
 
-`CodexModelCatalogBuilder` supplies a one-sentence base instruction. `CodexConfigBuilder` and `RuntimeSupervisor.EnsureClientAsync` generate runtime input; manually editing generated files is not a durable settings design. The gear entry opens diagnostics, not a complete editable settings interface.
+`App.tsx` passes stream deltas through `textValue`, which rejects strings whose trimmed length is zero. Splitting `Hello`, ` `, `world` therefore produces `Helloworld`; newline/indent-only chunks are affected too. A later authoritative completion might repair a completed message, but an interrupted stream cannot rely on that. Patch 008 adds a lossless nonempty-string admission helper, wires both assistant event aliases and tests interruption plus actual handler usage.
 
-Patch 002 gives the existing catalog a concrete default policy: own authorized goals, perform routine prerequisites, use helpers, retry reasonable approaches, verify outcomes, preserve exact provider choice, protect personal files and essential software, and install only reasonably trustworthy software. It does not claim that text prevents damage or guarantees that a particular model follows instructions. Its tests establish prompt inclusion and identity preservation only.
+### Customization and provider administration: F02, F08, F12
 
-S001 adds a host-owned revisioned settings record, scoped effective settings, real save/apply status and instruction previews. This is deliberately a specification rather than a fake Settings dialog with no runtime propagation. The effective instruction composition must be inspected through the actual locked runtime before enabling system/developer overrides.
+The settings-looking control opens diagnostics. `CodexModelCatalogBuilder` supplies a compiled base instruction; `CodexConfigBuilder` and `RuntimeSupervisor.EnsureClientAsync` generate runtime inputs. Editing generated TOML or putting text into localStorage alone would not be durable customization.
 
-### F03: one bounded display representation for tools
+Patch 002 adds a useful default goal-ownership policy now. S001 defines host-owned revisioned settings, atomic recovery, effective instruction composition, precise save/pending/applied states and idle-boundary runtime propagation. It explicitly avoids duplicating the same prompt in catalog, config and user messages. S005 adds user-owned provider profiles and immutable capability snapshots without rewriting historical release evidence or weakening exact selection.
 
-The baseline live projection caps strings but allows nested result/error JSON to survive as objects; other readers ask for strings and silently lose that content. Saved output projection, range reads, UI live cards and terminal diagnostics use inconsistent field precedence. Dynamic tool `contentItems` and explicit `success:false` need handling too.
+`CapabilityRecordPathResolver` currently restricts ordinary Release records to bundled release paths; the host explicitly recognizes LM Studio, OpenRouter and NVIDIA. Those are real supported paths, not an already universal provider plug-in system. New compatible endpoints need adapter/request evidence. Preserve OpenRouter routing without fallback and NVIDIA's deliberate adapter/model rules.
 
-Patch 003 introduces `ToolOutputText` for display-only serialization and consistent precedence, preserves explicit failure, carries exit code and duration, and makes the live/saved/range paths agree. It retains bounded text and omission disclosures without changing provider input or source journal bytes. JSON is deliberately displayed as text, not executable markup. The patch does not eliminate allocation of the entire incoming JSON object or promise an arbitrary-size RPC memory bound. Rich result blocks remain S004.
+### Content and conversation UX: F04, F05, F09–F11, F17
 
-### F04/F05: immediately usable conversation improvements
+The composer and host `startTurn` path accept text, output limits and reasoning effort, not attachment descriptors. `TurnStartOptions` constructs text input; `ThreadTranscriptProjector` omits non-text content. S002 therefore starts with durable payloads, manifests, exact submission receipts and provider admission, before adding a picker. It includes image-only sends, explicit file scope, restart/fork behavior and reference-aware cleanup. Unsupported images must not silently become filenames.
 
-The baseline transcript/composer are constrained to approximately 820/850 px even on very large displays. Patch 004 offers an explicit Readable/Wide control using the existing design system, persists only a UI preference, and keeps readable layout as the default. Patch 005 adds message copying with truthful failure feedback. Truncated messages say Copy visible preview; they never imply that omitted journal content was copied. These are small working features, not substitutes for the settings or rich-content specifications.
+Reasoning effort and token usage already exist, but `AppServerNotificationProjection` and saved transcript reconstruction do not provide a reasoning timeline. NVIDIA can translate exposed `reasoning_content`; that alone does not make it visible or durable in the app. S003 separates readable summaries, provider-native text, metadata-only, ordinary-text-only, opaque continuation and restricted channels. No fabricated hidden reasoning or decoding private continuation for display.
 
-### F06/F07: protect the value of qualification tests
+S004 replaces the all-messages-then-all-tools arrangement with a journal-derived item timeline, safe Markdown/code, typed tool presentation, actual dates, older-turn paging and user-controlled follow-scroll. It preserves bounded history and existing conversation controls. Patches 004/005 provide narrow immediate improvements: Readable/Wide and Copy message/Copy visible preview with honest failure feedback. They are not substitutes for S001 or S004.
 
-`qa-run-root.test.mjs` compares a temp directory spelling with a canonical real path. Windows can supply an 8.3 TEMP alias. Canonicalizing the fixture's own newly created root fixes the tests without changing `qa-run-root.mjs` or weakening its traversal/junction guards.
+### Continuation and task ownership: F13–F16
 
-`ui-accessibility.mjs` selects both a saved-chat row and its overflow button with one accessible-name regex, expects activity cards to have an obsolete role, and omits fields now required by exact resume/model-selection contracts. The test should return valid synthetic identities and use the current semantic controls. It should not relax the application to accept a missing frozen capability. Patch 007 repairs the fixture and preserves the keyboard, modal and failure assertions.
+NVIDIA `Program.cs` stores exact native assistant messages in `AdapterState.AssistantReplay`, with 128-message/4 MiB cache limits. Some replay paths require that state; Kimi explicitly needs exact reasoning/tool-call material. Host restart starts a new adapter with no durable replay root. Saved visible messages are insufficient to reconstruct that private transport state. S006 defines immutable exact replay, alias identity, durable completion ordering, fork mapping and restart/corruption tests. Existing fail-closed behavior remains preferable to inventing continuation content.
 
-### F09: attachments require a durable input contract
+Turns and compaction use fixed ten-minute host budgets; the renderer uses a corresponding but separate long timeout, and selected provider retry counts are fixed at zero. The busy composer cannot even prepare the next draft. S007 establishes operation identity, acknowledgement versus completion, honest unknown outcomes, coherent budgets and safe drafting/queue/qualified steering. It does not blindly replay an accepted installer or file mutation after a lost response.
 
-The model catalog can describe input modalities, but `App.tsx` submits text, `bridge.ts` exposes no attachment lifecycle, and `RuntimeSupervisor.StartTurnCoreAsync` builds text input. The transcript projector omits non-text content rather than reconstructing usable attachment descriptors. A file-picker button alone would be misleading.
+Full-user shell already supports much routine installation, helper creation and configuration. The missing product foundation is consistent task ownership, scoped grants and observed postconditions, not a dedicated API for every action. S008 defines that contract and preserves the essential warning that prompts/host checks do not constrain arbitrary unrestricted shell. S009 measures actual request overhead before proposing discovery changes; no giant-tool-prompt finding is fabricated from a candidate registry that is not callable.
 
-S002 covers explicit file selection/paste/drop, opaque host-owned attachment IDs, immutable app-managed copies, preview/error states, provider admission, draft/turn references, restart behavior and safe cleanup. Unsupported images must fail before send rather than silently becoming filenames or text-only prompts. User attachment selection grants the selected file, not its whole parent directory.
+## Architecture and integration guidance
 
-### F10: reasoning is a capability and content problem
+Keep Core's reusable record/projection role, Host's native/lifecycle ownership and React's rendering role. The amount of orchestration in `App.tsx` and `RuntimeSupervisor.cs` warrants extracting cohesive feature controllers during implementation, not a mandatory rewrite before useful work.
 
-`AppServerNotificationProjection` excludes reasoning items from the main preserved content path; the UI handles assistant and tool events, not a reasoning transcript; saved transcript reconstruction keeps user/assistant text. The catalog's reasoning-summary defaults also do not enable a generic content stream. Meanwhile `NeoBabylon.NvidiaAdapter/Program.cs` already translates exposed `reasoning_content` into reasoning events. Wiring must address all these layers, not only add an Analysis accordion.
+Use one effective configuration pipeline, one journal-derived conversation model and exact provider-native replay where required. A UI cache is not a settings authority. Display truncation is not replay serialization. DPAPI-protected credentials may require re-entry after OS reinstall even if Data survives. New durable stores must join existing recovery conventions explicitly, including fixed record keys and future-schema handling.
 
-S003 separates summaries, explicitly exposed native text, metadata-only usage, opaque continuation material, no-channel providers and providers that must not expose content. Never generate a hidden reasoning transcript from latency, token counters or ordinary answer text. OpenAI reasoning summaries and opaque encrypted continuation are not interchangeable with provider-native text.
+For current Codex comparisons, consult [CODEX_SOURCES.md](codex-parity/CODEX_SOURCES.md). The documented baseline supports typed input, lifecycle events and configuration concepts that justify the proposed product work. It does not prove those newer methods exist in the pinned runtime or establish every platform's closed-source desktop UI. Generate and verify schemas from the exact locked executable before adding protocol operations.
 
-### F11/F17: conversation readability and chronology
+## Priority, genuine decisions and non-recommendations
 
-`App.tsx` renders message bodies as plain text and appends the activity section after the message list, rather than interleaving tool activity with the appropriate turn. It lacks a full Markdown/code/result artifact presentation layer. TODAY is a literal header rather than reliable date grouping. Whole-thread fork and loaded-history search exist; editing a particular earlier prompt, retrying from a known turn and full-history search should not be advertised as present.
+First apply the eight bounded patches with their declared dependencies and run the supplied checks. Then implement S001 settings/instructions and S006 replay in parallel. Build attachment persistence and reasoning projection next; stage S004's safe text/code/timeline work independently where possible. Extend provider administration and operation lifecycle only with exact capability evidence. Measure tool overhead before redesigning orchestration.
 
-S004 completes a stable item timeline with source IDs, bounded paging, user-controlled follow-scroll, safe Markdown, code copying, typed tool blocks, correct dates and journal-backed conversation commands. It does not establish a second authoritative history store in the renderer.
+No product decision blocks the patch batch or the proposed conservative defaults. Credentials and the omitted locked runtime are execution prerequisites for later qualification, not reasons to ask routine design questions. A new decision is required only before promising technical containment under unrestricted execution; that tradeoff is deliberately deferred.
 
-### F12: preserve heterogeneous providers while making them configurable
+Do not replace WPF/WebView2/Astryx, change to an OpenAI-only product, silently update the runtime, enable generated tools because a review exists, substitute providers, force new chats for accepted same-chat switching, add approval spam, auto-read personal browser/files, implement fake settings, display invented reasoning, or automatically repeat unknown side effects. Packaging, broad computer control and universal discovery are not prerequisites for this first batch.
 
-`RuntimeSupervisor.EnsureClientAsync` has explicit provider-ID branches; capability records originate through bounded existing record paths including release evidence. This is an important foundation but not a general profile workflow. S005 adds user-owned profiles alongside shipped qualification fixtures, with transport type, exact endpoint/model/route, credential references and evidence-backed capabilities. Unknown is distinct from unsupported and supported. “OpenAI-compatible” does not prove multimodal input, reasoning, tool schema, cancellation or replay compatibility.
-
-### F13: saved history is not sufficient for NVIDIA continuation
-
-In `NeoBabylon.NvidiaAdapter/Program.cs`, `TranslateInput`, `AppendReplay` and `AdapterState` require exact cached assistant reasoning/tool-call material for some replay paths. `RequiresReasoningReplay` explicitly includes `moonshotai/kimi-k3`. `AssistantReplay` is an in-memory dictionary with bounded FIFO eviction. A process restart or eviction removes data that a subsequent continuation may require; `MissingReplay` correctly refuses reconstruction rather than inventing equivalent history.
-
-This is a source-proven durability gap, not a claim that a live NVIDIA run failed during this review. S006 retains exact provider-native replay in a protected, versioned sidecar, binds it to the exact provider/thread/item identity and treats the cache as an acceleration layer. Unknown/incompatible legacy history stays readable but cannot silently execute with substituted replay. This deserves priority alongside settings, not after decorative UI improvements.
-
-### F14/F16: distinguish waiting, retrying, interrupted and unknown
-
-Existing interrupt and exact command-stop implementations should be retained. The busy composer, missing steer bridge and distributed request/turn state still make lengthy jobs feel less capable than the intended baseline. Completion waits and bridge deadlines are not proof that execution stopped.
-
-`AppServerClient.WaitForTurnCompletionAsync` and `MatchesExpectedTurn` deserve deterministic tests for generic error notifications, transient retry notifications, stale epochs and unrelated turn IDs. A generic error branch is broader than some of the item/turn filters; actual runtime event ordering and retry semantics must be established before changing it. This is a concrete investigation target, not a claimed reproduced race.
-
-Separately, `TurnDiagnostics.Extract` maps an unfamiliar completed-item status to `succeeded:false` and an outcome of failed, while the live renderer can represent unknown as informational. S007 makes unknown outcomes explicit without ever representing unknown as success. Automatic re-execution of a potentially side-effecting operation is not an acceptable retry policy.
-
-### F15/F18: autonomous goals without an enormous prompt catalog
-
-The accepted shell/runtime foundation is compatible with creating helpers, installing prerequisites and executing multi-step tasks. This public-source review cannot demonstrate that every requested desktop/browser workflow completes, or measure the private runtime's actual per-turn tool prompt. There is insufficient evidence to label the implementation a giant always-on tool dump.
-
-S008 defines scoped inputs, trusted installation and result-verification contracts around existing tools. S009 specifies measurement and bounded lazy discovery experiments before making registry changes. Feature flags and generated-tool registration must not be mistaken for proof of efficient model-visible prompting. Normal temporary helper scripts do not need the persistent generated-tool activation path.
-
-## Current Codex comparison: verified expectations, not invented parity
-
-Primary sources were consulted on 2026-10-04:
-
-- https://developers.openai.com/codex/app/features — redirects in the retrieved documentation to https://learn.chatgpt.com/docs/features
-- https://developers.openai.com/codex/app/settings — redirects to https://learn.chatgpt.com/docs/reference/settings
-- https://developers.openai.com/codex/app-server — redirects to https://learn.chatgpt.com/docs/app-server
-- https://developers.openai.com/api/docs/guides/reasoning
-
-The current documentation establishes useful behavioral targets: project conversations with richer input, configurable instructions/preferences, typed streamed items and explicit interruption/steering semantics. The App Server documentation describes user input beyond text, separate reasoning items, command execution metadata, MCP and dynamic tool results, and turn lifecycle events. Those are sound reasons to complete the corresponding NeoBabylon paths.
-
-The reasoning guidance distinguishes supported summaries from inaccessible raw hidden reasoning. It also describes opaque continuation information; that is not content to decode for display. Provider-native reasoning outside that API requires its own validated adapter contract.
-
-Documentation redirects and evolving product naming mean this review does not claim to have run the latest closed-source Codex desktop UI, establish every platform's precise controls, or verify that every described feature ships in Martin's installed version. No requirement here depends on guessing a particular current Codex release number. Newer protocol documentation is a behavioral reference; it does not authorize sending unsupported methods to the pinned runtime. Each protocol addition must be checked against the repository's generated schema and exact locked runtime.
-
-## Architecture observations
-
-The existing boundary between Core projections/records, host supervision and renderer state is appropriate. The biggest maintainability problem is the amount of orchestration concentrated in `RuntimeSupervisor.cs` and `App.tsx`, not the framework choice. Extract cohesive controllers while implementing specific features; avoid a prerequisite wholesale refactor.
-
-Use one host-owned effective configuration pipeline and one journal-derived timeline. Avoid parallel settings state in localStorage, arbitrary generated TOML edits and provider adapters making unrecorded identity substitutions. Keep display serialization separate from replay serialization: bounded readable text is good for cards but cannot stand in for exact native provider history.
-
-UI localStorage is proportionate for a theme or width preference, not the only durable home for instructions, provider definitions, attached files or irreversible-operation consent. Host-owned records should use the repository's protected-record, recovery and application-root conventions. DPAPI-protected secrets may not survive an OS reinstall merely because Data survives; that limitation must remain explicit.
-
-## Priority and dependencies
-
-1. Apply and qualify the bounded patch batch. It fixes confirmed projection defects and provides useful visible improvements without a runtime replacement.
-2. Implement S001 settings/instructions and S006 exact NVIDIA continuation in parallel; their host ownership must be agreed through the supplied contracts, not new routine product questions.
-3. Implement S002 attachments and S003 reasoning, sharing journal content identity but keeping private replay separate from display.
-4. Implement S004 ordered rich transcript and conversation commands; stage safe text/code rendering before provider-specific rich outputs.
-5. Implement S005 profile management and S007 operation lifecycle, with selected-tuple qualification before enabling broader combinations.
-6. Implement scoped workflow improvements from S008. Measure S009 before attempting a larger tool-orchestration redesign.
-
-See the implementation-order document for the precise patch graph, vertical slices and acceptance commands. Settings is not a prerequisite for fixing tool output, identity or tests. Attachment persistence is a prerequisite for promising attachment restoration. A durable replay store is a prerequisite for promising affected NVIDIA conversations survive a process restart.
-
-## Decisions actually needed
-
-No new product decision blocks this patch set. Default readable width, explicit Wide mode, preview-only copying, conservative capability admission, next-safe-boundary application of settings and no provider substitution follow the supplied intent.
-
-A later decision is required only if the product is to claim technical enforcement of personal-file/system boundaries while arbitrary tools run with full logged-in-user access. That is a real containment/authority tradeoff, already deferred in repository decisions. This review neither quietly solves it with prompts nor forces it into the first batch. Provider-specific live qualification may require credentials or a selected runtime tuple; that is an execution prerequisite, not a reason to redesign providers.
-
-## Intentionally not recommended
-
-Do not rewrite the desktop shell, replace Astryx, consolidate the private runtime into the product repository, silently update the binary lock, or treat an upstream public binary as equivalent. Do not replace provider flexibility with an OpenAI-only path. Do not reopen the accepted same-chat switching decision. Do not enable generated tools just because a review exists. Do not add approval prompts for routine authorized prerequisites. Do not use ordinary model output as authority to expand personal-file scope. Do not claim unexposed hidden reasoning exists or decode opaque continuation for display. Do not implement automatic replay of unknown side effects. Do not create a universal tool-discovery subsystem before measuring the actual request path.
-
-## Completion and verification
-
-The patch/spec package is the deliverable. It does not implement all nine larger specifications. Detailed verification results, revisions, commands, failures corrected during this review and remaining native/live/manual gates are recorded separately in [VERIFICATION.md](codex-parity/VERIFICATION.md). Implementation agents must use that record rather than infer a passed product gate from a successful compiler or from this report's breadth.
+The eight patches are implementation proposals; the nine specifications are not claimed as implemented. Builds, synthetic tests, browser checks and native/live gaps are recorded separately in [VERIFICATION.md](codex-parity/VERIFICATION.md).

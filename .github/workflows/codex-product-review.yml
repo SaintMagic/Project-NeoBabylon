@@ -13,24 +13,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch exact published source and interrupted review package
+      - name: Snapshot exact completed review package and product base
         shell: bash
         run: |
           set -euo pipefail
           git init source
           git -C source remote add origin https://github.com/SaintMagic/Project-NeoBabylon.git
-          git -C source fetch origin f126612a00231a58626d72108aac6ee912431ee3 5e5798797f04b19124404b94adc327bcfcd141ec
+          git -C source fetch origin "$GITHUB_SHA" f126612a00231a58626d72108aac6ee912431ee3
           mkdir evidence
-          for ref in f126612a00231a58626d72108aac6ee912431ee3 5e5798797f04b19124404b94adc327bcfcd141ec; do
-            git -C source archive --format=tar --output="$GITHUB_WORKSPACE/evidence/source-$ref.tar" "$ref"
-            git -C source ls-tree -r "$ref" > "evidence/tree-$ref.txt"
-            git -C source cat-file commit "$ref" > "evidence/commit-$ref.txt"
-          done
+          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/evidence/review-package.tar" "$GITHUB_SHA"
+          git -C source ls-tree -r "$GITHUB_SHA" > evidence/review-tree.txt
+          git -C source cat-file commit "$GITHUB_SHA" > evidence/review-commit.txt
+          printf '%s\n' "$GITHUB_SHA" > evidence/review-revision.txt
+          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/evidence/product-base.tar" f126612a00231a58626d72108aac6ee912431ee3
+          git -C source diff --name-only f126612a00231a58626d72108aac6ee912431ee3 "$GITHUB_SHA" > evidence/review-changed-paths.txt
           sha256sum evidence/*.tar > evidence/SHA256SUMS
-      - name: Retain public source snapshots for isolated review
+      - name: Retain completed package for independent readback
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: recovered-neobabylon-review-snapshots
+          name: neobabylon-final-review-package
           path: evidence/
           retention-days: 14
           if-no-files-found: error
