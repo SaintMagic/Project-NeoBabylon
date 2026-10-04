@@ -13,24 +13,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch exact reviewed public source
+      - name: Fetch exact published source and interrupted review package
         shell: bash
         run: |
           set -euo pipefail
           git init source
           git -C source remote add origin https://github.com/SaintMagic/Project-NeoBabylon.git
-          git -C source fetch --depth=1 origin f126612a00231a58626d72108aac6ee912431ee3
-          git -C source checkout --detach FETCH_HEAD
-          test "$(git -C source rev-parse HEAD)" = f126612a00231a58626d72108aac6ee912431ee3
+          git -C source fetch origin f126612a00231a58626d72108aac6ee912431ee3 5e5798797f04b19124404b94adc327bcfcd141ec
           mkdir evidence
-          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/evidence/source-f126612a.tar" HEAD
-          git -C source rev-parse HEAD > evidence/source-commit.txt
-          git -C source ls-tree -r HEAD > evidence/source-tree.txt
-          sha256sum evidence/source-f126612a.tar > evidence/SHA256SUMS
-      - name: Retain source snapshot for isolated review
+          for ref in f126612a00231a58626d72108aac6ee912431ee3 5e5798797f04b19124404b94adc327bcfcd141ec; do
+            git -C source archive --format=tar --output="$GITHUB_WORKSPACE/evidence/source-$ref.tar" "$ref"
+            git -C source ls-tree -r "$ref" > "evidence/tree-$ref.txt"
+            git -C source cat-file commit "$ref" > "evidence/commit-$ref.txt"
+          done
+          sha256sum evidence/*.tar > evidence/SHA256SUMS
+      - name: Retain public source snapshots for isolated review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: reviewed-source-f126612a
+          name: recovered-neobabylon-review-snapshots
           path: evidence/
           retention-days: 14
           if-no-files-found: error
