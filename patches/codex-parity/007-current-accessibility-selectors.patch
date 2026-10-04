@@ -1,5 +1,5 @@
 diff --git a/tests/qa/ui-accessibility.mjs b/tests/qa/ui-accessibility.mjs
-index f0edb50..15bb71f 100644
+index f0edb50..249ea45 100644
 --- a/tests/qa/ui-accessibility.mjs
 +++ b/tests/qa/ui-accessibility.mjs
 @@ -257,11 +257,11 @@ try {
@@ -25,7 +25,7 @@ index f0edb50..15bb71f 100644
    await savedBeta.focus();
    await page.keyboard.press("Enter");
    await page.waitForFunction(() => window.__qaAccessibilityState.requests.some((request) => request.operation === "resumeThread"));
-@@ -377,7 +377,7 @@ try {
+@@ -377,11 +377,11 @@ try {
    await composer.fill("Accessibility UI fixture only");
    await composer.press("Enter");
    await page.getByRole("alert").filter({ hasText: "ordinary command failed in this UI fixture" }).waitFor();
@@ -34,7 +34,25 @@ index f0edb50..15bb71f 100644
    const approvalRegion = page.getByRole("region", { name: "Command approval" });
    await approvalRegion.waitFor();
    await auditContrast("dark-failure-and-approval");
-@@ -418,8 +418,8 @@ try {
+-  await approvalRegion.getByRole("button", { name: "Deny", exact: true }).focus();
++  await approvalRegion.getByRole("button", { name: "Deny for Command approval, request 71", exact: true }).focus();
+   await page.keyboard.press("Enter");
+   await page.waitForFunction(() => window.__qaAccessibilityState.requests.some((request) =>
+     request.operation === "respondToApproval" && request.decision === "decline"));
+@@ -401,8 +401,11 @@ try {
+   assert.equal(await reviewContent.evaluate((element) => document.activeElement === element), true,
+     "Tab should reach the named keyboard stop for scrollable review content");
+   await page.keyboard.press("Tab");
++  assert.equal(await reviewContent.locator("pre[tabindex='0']").evaluate((element) => document.activeElement === element), true,
++    "Tab should reach the separately scrollable diff");
++  await page.keyboard.press("Tab");
+   assert.equal(await reviewDone.evaluate((element) => document.activeElement === element), true,
+-    "Tab should move from review content to Done");
++    "Tab should move from the diff to Done");
+   await page.keyboard.press("Tab");
+   assert.equal(await reviewDialog.locator("button").first().evaluate((element) => document.activeElement === element), true,
+     "Tab at the last review control should wrap to the first");
+@@ -418,8 +421,8 @@ try {
    const unknownStatusComposer = page.getByRole("textbox", { name: "Message NeoBabylon" });
    await unknownStatusComposer.fill("Unknown activity status fixture only");
    await unknownStatusComposer.press("Enter");
