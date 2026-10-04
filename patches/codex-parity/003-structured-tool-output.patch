@@ -137,7 +137,7 @@ index 0000000..d5a0032
 +            && string.Equals(text, "failed", StringComparison.OrdinalIgnoreCase);
 +}
 diff --git a/host/NeoBabylon.Core/TurnDiagnostics.cs b/host/NeoBabylon.Core/TurnDiagnostics.cs
-index 238b7b0..c08e214 100644
+index 238b7b0..b60e475 100644
 --- a/host/NeoBabylon.Core/TurnDiagnostics.cs
 +++ b/host/NeoBabylon.Core/TurnDiagnostics.cs
 @@ -32,12 +32,12 @@ public static class TurnDiagnostics
@@ -156,7 +156,15 @@ index 238b7b0..c08e214 100644
              var summary = new JsonObject
              {
                  ["eventType"] = "toolOutcome",
-@@ -57,7 +57,7 @@ public static class TurnDiagnostics
+@@ -47,6 +47,7 @@ public static class TurnDiagnostics
+                 ["itemId"] = StringValue(item["id"]),
+                 ["callId"] = StringValue(item["callId"]),
+                 ["status"] = status,
++                ["durationMs"] = item["durationMs"]?.DeepClone(),
+                 ["outcome"] = succeeded ? "succeeded" : "failed",
+                 ["succeeded"] = succeeded
+             };
+@@ -57,7 +58,7 @@ public static class TurnDiagnostics
              }
  
              CopyString(summary, "command", item, "command");
@@ -179,10 +187,10 @@ index d71aadc..e291fe5 100644
  
 diff --git a/tests/product-parity/ToolOutputChecks.cs b/tests/product-parity/ToolOutputChecks.cs
 new file mode 100644
-index 0000000..3da0a21
+index 0000000..2821ad1
 --- /dev/null
 +++ b/tests/product-parity/ToolOutputChecks.cs
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,62 @@
 +using System.Text.Json.Nodes;
 +using NeoBabylon.Core;
 +
@@ -234,6 +242,7 @@ index 0000000..3da0a21
 +            Fixture.Require(saved["text"]?.GetValue<string>() == "output", "Empty error shadows real output.");
 +            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Nonzero exit misclassified.");
 +            Fixture.Require(saved["exitCode"]?.GetValue<int>() == 7 && saved["durationMs"]?.GetValue<int>() == 123, "Execution metadata lost.");
++            Fixture.Require(TurnDiagnostics.Extract([Project(item)])[0]?["durationMs"]?.GetValue<int>() == 123, "Terminal diagnostics lost duration.");
 +        });
 +    }
 +
@@ -245,18 +254,26 @@ index 0000000..3da0a21
 +        new JsonObject { ["data"] = new JsonArray(new JsonObject { ["turnId"] = "t", ["item"] = item.DeepClone() }) }, "thread", "t", "i", offset, 32_768);
 +}
 diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
-index c24f9d1..0908a0f 100644
+index c24f9d1..9b96f38 100644
 --- a/ui/diagnostic/src/App.tsx
 +++ b/ui/diagnostic/src/App.tsx
-@@ -1233,6 +1233,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+@@ -1227,12 +1227,15 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+           if (!item) continue;
+           const rawExitCode = field(item, "exitCode");
+           const exitCode = typeof rawExitCode === "number" && Number.isSafeInteger(rawExitCode) ? rawExitCode : undefined;
++          const rawDuration = field(item, "durationMs");
++          const durationMs = typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : undefined;
+           addActivity({
+             id: textValue(field(item, "itemId")) ?? textValue(field(item, "callId")) ?? crypto.randomUUID(),
+             title: textValue(field(item, "toolName")) ?? textValue(field(item, "command")) ?? "Tool activity",
              detail: textValue(field(item, "output")) ?? textValue(field(recordValue(field(item, "failure")), "message")),
              status: field(item, "succeeded") === true ? "succeeded" : field(item, "succeeded") === false ? "failed" : "info",
              ...(exitCode === undefined ? {} : { exitCode }),
-+          ...(durationMs === undefined ? {} : { durationMs }),
++            ...(durationMs === undefined ? {} : { durationMs }),
              ...(recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined),
              itemType: textValue(field(item, "itemType")),
              threadId: textValue(field(result, "threadId")) ?? threadId ?? undefined,
-@@ -1590,13 +1591,18 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+@@ -1590,13 +1593,18 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
          const rawExitCode = field(item, "exitCode");
          const exitCode = typeof rawExitCode === "number" && Number.isSafeInteger(rawExitCode) ? rawExitCode : undefined;
          const failure = textValue(rawFailure);
@@ -278,7 +295,7 @@ index c24f9d1..0908a0f 100644
            ...displayMetadata,
            itemType,
            threadId: textValue(field(params, "threadId")) ?? threadId ?? undefined,
-@@ -1975,6 +1981,7 @@ function ActivityCard({ activity, onInspect }: { activity: ActivityEntry; onInsp
+@@ -1975,6 +1983,7 @@ function ActivityCard({ activity, onInspect }: { activity: ActivityEntry; onInsp
      <div className="activity-status-group">
        <span className="activity-status-label" role="status">{stateLabel}</span>
        {exitCode !== undefined && <span className="activity-exit-code">Exit code {exitCode}</span>}

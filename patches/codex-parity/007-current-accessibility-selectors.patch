@@ -1,7 +1,21 @@
 diff --git a/tests/qa/ui-accessibility.mjs b/tests/qa/ui-accessibility.mjs
-index 2a7cc5c..1fc4896 100644
+index f0edb50..15bb71f 100644
 --- a/tests/qa/ui-accessibility.mjs
 +++ b/tests/qa/ui-accessibility.mjs
+@@ -257,11 +257,11 @@ try {
+             && entry.capabilityRecord.modelIdentifier === message.modelIdentifier)?.capabilityRecord;
+           if (!record) throw new Error("fixture refused an unknown capability binding");
+           state.selectedCapability = record;
+-          return { capabilityRecord: record };
++          return { capabilityRecord: record, threadId: state.activeThreadId };
+         }
+         case "resumeThread": return {
+           threadId: message.threadId, cwd: state.selectedWorkspace, modelProvider: "lmstudio", model: "duplicate-id",
+-          executionEligible: true, turns: [],
++          capabilityRecord: records[0].capabilityRecord, executionEligible: true, turns: [],
+         };
+         case "newTask": state.activeThreadId = null; return {};
+         case "startThread":
 @@ -345,7 +345,7 @@ try {
  
    const search = page.getByRole("searchbox", { name: "Search loaded conversations" });
