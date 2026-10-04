@@ -27,8 +27,38 @@ index 142375a..94b7303 100644
    await page.setViewportSize({ width: 2560, height: 1440 });
    const transcript = page.locator(".transcript");
    const readable = await transcript.evaluate((element) => element.getBoundingClientRect().width);
+diff --git a/tests/qa/ui-accessibility.mjs b/tests/qa/ui-accessibility.mjs
+index 2a7cc5c..b2be585 100644
+--- a/tests/qa/ui-accessibility.mjs
++++ b/tests/qa/ui-accessibility.mjs
+@@ -478,12 +478,6 @@ try {
+   assert.ok(await page.getByRole("status").filter({ hasText: "Turn interrupted" }).count() > 0,
+     "the deterministic stop path should show an attributed interrupted status");
+ 
+-  if (process.argv.includes("--product-parity")) {
+-    const { verifyProductParityUi } = await import("./product-parity-ui-checks.mjs");
+-    await verifyProductParityUi(page, runRoot);
+-  }
+-  assert.deepEqual(consoleErrors, [], "browser console should stay error-free");
+-  assert.deepEqual(externalRequests, [], "the deterministic UI qualification must not contact a provider or external site");
+   const requestSummary = await page.evaluate(() => window.__qaAccessibilityState.requests.map((request) => ({
+     operation: request.operation,
+     providerId: request.providerId,
+@@ -491,6 +485,12 @@ try {
+     workspacePath: request.workspacePath,
+     decision: request.decision,
+   })));
++  if (process.argv.includes("--product-parity")) {
++    const { verifyProductParityUi } = await import("./product-parity-ui-checks.mjs");
++    await verifyProductParityUi(page, runRoot);
++  }
++  assert.deepEqual(consoleErrors, [], "browser console should stay error-free");
++  assert.deepEqual(externalRequests, [], "the deterministic UI qualification must not contact a provider or external site");
+   assert.ok(requestSummary.some((request) => request.operation === "startTurn"), "expected a mocked task send");
+   const evidence = {
+     kind: "deterministic UI accessibility fixture; not live inference or real App Server",
 diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
-index 10759ad..3d29ffb 100644
+index fffacf9..9969203 100644
 --- a/ui/diagnostic/src/App.tsx
 +++ b/ui/diagnostic/src/App.tsx
 @@ -1,5 +1,6 @@
@@ -38,7 +68,7 @@ index 10759ad..3d29ffb 100644
  import { Button } from "@astryxdesign/core/Button";
  import { IconButton } from "@astryxdesign/core/IconButton";
  import { listenToHost, requestHost, type HostNotification, type HostOperation } from "./bridge";
-@@ -1798,7 +1799,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+@@ -1792,7 +1793,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
            {savedOutputsTruncated && <div className="history-note" role="note">Showing the 64 newest saved tool outputs. Older output history remains in Codex App Server.</div>}
            {activitiesTruncated && <div className="history-note" role="note">Older activity cards or text are omitted from this local preview to keep long sessions responsive. Saved tool output may still be available in task history.</div>}
            <div className={`conversation-scroll ${messages.length ? "has-messages" : ""}`}>
