@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "product": "NeoBabylon",
+  "toolId": "REPLACE_TOOL_ID",
+  "candidatePath": "REPLACE_ABSOLUTE_CANDIDATE_DIRECTORY",
+  "revision": "REPLACE_REVISION",
+  "name": "REPLACE_DISPLAY_NAME",
+  "purpose": "REPLACE_PURPOSE",
+  "proposedBehavior": "REPLACE_PROPOSED_BEHAVIOR",
+  "missingCapability": "REPLACE_CAPABILITY_GAP",
+  "origin": {
+    "taskId": "REPLACE_TASK_ID",
+    "sessionId": "REPLACE_SESSION_ID",
+    "createdAtUtc": "REPLACE_ISO_8601_UTC_TIMESTAMP",
+    "creator": "REPLACE_CREATOR",
+    "provider": "REPLACE_PROVIDER",
+    "model": "REPLACE_MODEL",
+    "capabilityIdentity": "cap-v1:sha256:REPLACE_64_LOWERCASE_HEX",
+    "gapEvidenceId": "REPLACE_GAP_EVIDENCE_ID"
+  },
+  "entryPoint": "server.mjs",
+  "contract": {
+    "invocation": "stdio-mcp-node-v1",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
+    "outputSchema": "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"
+  },
+  "authority": {
+    "requiredPermissions": ["REPLACE_INFORMATIONAL_PERMISSION"],
+    "fileScopes": [],
+    "networkDestinations": [],
+    "dataFlows": ["REPLACE_INFORMATIONAL_DATA_FLOW"],
+    "denialBehavior": "REPLACE_DENIAL_BEHAVIOR",
+    "permissionMode": "danger-full-access",
+    "approvalPolicy": "never",
+    "evidenceSha256": "REPLACE_64_LOWERCASE_HEX"
+  },
+  "dependencies": [],
+  "evidence": [
+    { "kind": "existing-tool-search", "evidenceId": "REPLACE_SEARCH_ID", "outcome": "unverified-declaration", "description": "REPLACE_SEARCH_DESCRIPTION", "path": "evidence/existing-tool-search.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "kind": "composition-attempt", "evidenceId": "REPLACE_COMPOSITION_ID", "outcome": "unverified-declaration", "description": "REPLACE_COMPOSITION_DESCRIPTION", "path": "evidence/composition-attempt.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "kind": "current-task-authority", "evidenceId": "REPLACE_AUTHORITY_ID", "outcome": "unverified-declaration", "description": "REPLACE_AUTHORITY_DESCRIPTION", "path": "evidence/current-task-authority.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "kind": "capability-gap", "evidenceId": "REPLACE_GAP_EVIDENCE_ID", "outcome": "unverified-declaration", "description": "REPLACE_GAP_DESCRIPTION", "path": "evidence/capability-gap.md", "sha256": "REPLACE_64_LOWERCASE_HEX" }
+  ],
+  "files": [
+    { "path": "server.mjs", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "path": "evidence/existing-tool-search.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "path": "evidence/composition-attempt.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "path": "evidence/current-task-authority.md", "sha256": "REPLACE_64_LOWERCASE_HEX" },
+    { "path": "evidence/capability-gap.md", "sha256": "REPLACE_64_LOWERCASE_HEX" }
+  ],
+  "reviewState": "unapproved"
+}

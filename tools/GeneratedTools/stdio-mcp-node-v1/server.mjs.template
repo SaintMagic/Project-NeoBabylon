@@ -1,0 +1,21 @@
+// Inert source starter only. This intentionally provides no MCP transport or
+// useful tool handler; it must be replaced and reviewed before any future use.
+export const tool = Object.freeze({
+  name: "REPLACE_TOOL_ID",
+  inputSchema: Object.freeze({
+    type: "object",
+    properties: Object.freeze({}),
+    required: Object.freeze([]),
+    additionalProperties: false,
+  }),
+  outputSchema: Object.freeze({
+    type: "object",
+    properties: Object.freeze({}),
+    required: Object.freeze([]),
+    additionalProperties: false,
+  }),
+});
+
+export function invoke(_input) {
+  throw new Error("Inert NeoBabylon generated-tool template; replace and review before use.");
+}

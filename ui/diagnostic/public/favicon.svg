@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img" aria-labelledby="icon-title">
+  <title id="icon-title">NeoBabylon tower</title>
+  <defs>
+    <linearGradient id="brand" x1="5" y1="4" x2="58" y2="61" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8d9cff" />
+      <stop offset=".58" stop-color="#5c70ed" />
+      <stop offset="1" stop-color="#4b61d9" />
+    </linearGradient>
+    <linearGradient id="signal" x1="32" y1="9" x2="32" y2="23" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a5fff1" />
+      <stop offset="1" stop-color="#54d9d2" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#brand)" />
+  <path id="tower" d="M12 47h40l-4 8H16z M16 39h32l-4 8H20z M21 31h22l-3 8H24z M26 23h12l-2 8h-8z M30 16h4v7h-4z" fill="#f5f6ff" />
+  <path d="M32 47h20l-4 8H32z M32 39h16l-4 8H32z M32 31h11l-3 8h-8z M32 23h6l-2 8h-4z M32 16h2v7h-2z" fill="#c8d0ff" />
+  <path d="M18 46.5h28 M22 38.5h20 M25.5 30.5h13" fill="none" stroke="#9ff7ec" stroke-linecap="round" stroke-width="1.4" opacity=".95" />
+  <path d="M32 11v5" fill="none" stroke="url(#signal)" stroke-linecap="round" stroke-width="2" />
+  <circle cx="32" cy="9" r="2.2" fill="#a5fff1" />
+</svg>

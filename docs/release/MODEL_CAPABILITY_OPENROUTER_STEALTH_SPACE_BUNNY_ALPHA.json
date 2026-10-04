@@ -1,0 +1,79 @@
+{
+  "providerId": "openrouter",
+  "providerDisplayName": "OpenRouter",
+  "providerServerVersion": "Unknown",
+  "endpoint": "https://openrouter.ai/api/v1",
+  "modelIdentifier": "stealth/space-bunny-alpha",
+  "modelVariant": "Unknown",
+  "architecture": "Unknown",
+  "parameterCount": "Unknown",
+  "modelSizeBytes": "Unknown",
+  "quantization": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):quantization",
+    "note": "No quantization was established; no format is inferred."
+  },
+  "providerRoute": {
+    "state": "Known",
+    "value": {
+      "providerName": "Stealth",
+      "providerSlug": "stealth",
+      "endpointTag": "stealth"
+    },
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):provider_name and tag",
+    "note": "One Stealth provider endpoint was observed. The base provider tag can also match future Stealth endpoint variants. This is metadata, not a live route qualification; no default selection is changed."
+  },
+  "contextWindowAdvertised": {
+    "state": "Known",
+    "value": 1000000,
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):context_length"
+  },
+  "contextWindowEffective": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "No Codex effective-model event observed as of 2026-09-27; anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints reports advertised context_length only",
+    "note": "The Codex catalog can use the observed advertised 1000000-token context window. This does not verify a Codex effective context window or its separate usable-context projection."
+  },
+  "maxCompletionTokensAdvertised": {
+    "state": "Known",
+    "value": 524288,
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):max_completion_tokens",
+    "note": "Mapped to Codex model metadata max_completion_tokens. The patched runtime uses this as its request cap when no user override is supplied and rejects overrides above it; no build or live enforcement test has been run for this tuple."
+  },
+  "reasoningControls": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):supported_parameters",
+    "note": "reasoning_effort is advertised, but supported levels and default are unknown. No Codex reasoning level is mapped."
+  },
+  "toolFunctionCalling": {
+    "state": "Known",
+    "value": "tool_use",
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):tools, tool_choice, and supports_tool_choice",
+    "note": "Tools and tool_choice are advertised. tool_choice auto is true; none, required, and function are false. No live Codex tool round trip is qualified."
+  },
+  "applyPatchToolType": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27)",
+    "note": "Generic tool calling does not establish a Codex apply_patch wire format."
+  },
+  "structuredOutput": {
+    "state": "Known",
+    "value": {
+      "response_format": true,
+      "json_output": true,
+      "json_schema": false
+    },
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):response_format; official https://openrouter.ai/stealth/space-bunny-alpha (consulted 2026-09-27):JSON output without JSON-schema enforcement",
+    "note": "JSON output is advertised without JSON-schema enforcement. This does not qualify a live structured-output request or enable a Codex JSON-schema control."
+  },
+  "agentMetadata": {
+    "state": "Known",
+    "value": "type=llm; provider=Stealth; providerInputModalities=text,image,video; inputModalities=text,image; outputModalities=text; promptPrice=0; completionPrice=0",
+    "evidenceSource": "Anonymous OpenRouter GET https://openrouter.ai/api/v1/models/stealth/space-bunny-alpha/endpoints (2026-09-27):architecture and pricing; official https://openrouter.ai/stealth/space-bunny-alpha (consulted 2026-09-27):retention caveat",
+    "note": "Text, image, and video input and text output are provider observations; only text and image input are mapped to Codex because this runtime mapping does not support video. Prices were advertised as zero; no live charge was observed. The official model page says the anonymous provider may retain prompts and completions, so no privacy guarantee is inferred."
+  },
+  "toolQualifications": []
+}

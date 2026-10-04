@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "project": "NeoBabylon",
+  "generatedAt": "2026-09-22T10:12:13.0630249Z",
+  "records": [
+    {
+      "id": "CODEX-SOURCE-RUST-0.155.1",
+      "kind": "upstream-source",
+      "status": "captured",
+      "role": "selected Phase 0 baseline",
+      "originalUrl": "https://github.com/openai/codex.git",
+      "resolvedUrl": "https://github.com/openai/codex/archive/refs/tags/rust-v0.155.1.zip",
+      "release": "rust-v0.155.1",
+      "commit": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+      "tagObject": "4e21628f9ec9ee656650cd2b62ef92225725b5ac",
+      "retrievedAt": "2026-09-22T09:59:32.4099414Z",
+      "localPath": "reference/cache/codex/rust-v0.155.1/source",
+      "license": "Apache-2.0 as declared by the upstream workspace; preserve source LICENSE and NOTICE",
+      "coverage": "Complete public source archive extraction, including source, tests, protocol schema trees, SDKs, build metadata, and upstream notices",
+      "limitations": "Archive has no Git history; tag verification was false in the GitHub API response; source was inspected but not built or modified",
+      "artifacts": [
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/metadata/codex-rust-v0.155.1-source.zip",
+          "sha256": "2DC56C1DB2CC3FB44FC8F132E1CB7064EE3188EE8F811580264BBC672AF0D442",
+          "bytes": 18510573
+        },
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/metadata/files.sha256.json",
+          "sha256": "DCE69A7E02D5C38BD71FB5823C3E2AA04A6E402739E5AF7806E6234C564BF422",
+          "bytes": 1849997
+        }
+      ]
+    },
+    {
+      "id": "CODEX-APP-SERVER-WIN-X64-0.155.1",
+      "kind": "release-binary",
+      "status": "captured-and-inspected",
+      "role": "matching App Server protocol executable",
+      "originalUrl": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-app-server-x86_64-pc-windows-msvc.exe.zip",
+      "resolvedUrl": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-app-server-x86_64-pc-windows-msvc.exe.zip",
+      "release": "rust-v0.155.1",
+      "commit": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+      "retrievedAt": "2026-09-22T10:01:15.7031846Z",
+      "localPath": "reference/cache/codex/rust-v0.155.1/binary-x86_64-pc-windows-msvc/codex-app-server-x86_64-pc-windows-msvc.exe",
+      "license": "Upstream Codex Apache-2.0 source license and NOTICE apply; binary distribution decision remains open",
+      "coverage": "Windows x64 binary captured; --version and --help executed successfully",
+      "limitations": "No server session, provider call, approval flow, or end-to-end client test was run",
+      "artifacts": [
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/metadata/codex-app-server-x86_64-pc-windows-msvc.exe.zip",
+          "sha256": "99F220829A611756F41484839CFD086E32695AFDFBA5B1B9A2C04433557E7B16",
+          "bytes": 76630258
+        },
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/binary-x86_64-pc-windows-msvc/codex-app-server-x86_64-pc-windows-msvc.exe",
+          "sha256": "253C6D8424EA45BA9D36D1F665D9B7B4C917782D4CF5D56E61CD0664CC52BF0D",
+          "bytes": 236072752
+        }
+      ]
+    },
+    {
+      "id": "CODEX-CLI-WIN-X64-0.155.1",
+      "kind": "release-binary",
+      "status": "captured-and-inspected",
+      "role": "matching protocol-generation CLI",
+      "originalUrl": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-pc-windows-msvc.exe.zip",
+      "resolvedUrl": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-pc-windows-msvc.exe.zip",
+      "release": "rust-v0.155.1",
+      "commit": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+      "retrievedAt": "2026-09-22T10:07:07.3836073Z",
+      "localPath": "reference/cache/codex/rust-v0.155.1/binary-cli-x86_64-pc-windows-msvc/codex-x86_64-pc-windows-msvc.exe",
+      "license": "Upstream Codex Apache-2.0 source license and NOTICE apply; binary distribution decision remains open",
+      "coverage": "Windows x64 binary captured; --version, app-server --help, and all four protocol-generation commands executed successfully",
+      "limitations": "No ordinary CLI session, provider call, or source build was run",
+      "artifacts": [
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/metadata/codex-x86_64-pc-windows-msvc.exe.zip",
+          "sha256": "CE2269BDB7DFC06BB85C014C9C4E6B1601FFA0D646A2AE5B9B8CC8A427EF61FB",
+          "bytes": 107573195
+        },
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/binary-cli-x86_64-pc-windows-msvc/codex-x86_64-pc-windows-msvc.exe",
+          "sha256": "EBA0F32C976667CB9298EFAFD98513E823EEDA7B576A03EC658BB8BE8D336316",
+          "bytes": 307108144
+        }
+      ]
+    },
+    {
+      "id": "CODEX-OFFICIAL-DOCS-2026-09-22",
+      "kind": "official-documentation",
+      "status": "captured",
+      "role": "versioned documentation snapshot and coverage index",
+      "originalUrl": "https://learn.chatgpt.com/docs/llms.txt",
+      "resolvedUrl": "https://learn.chatgpt.com/docs/llms.txt",
+      "release": "official docs snapshot 2026-09-22; docs pages are not independently version-tagged",
+      "commit": null,
+      "retrievedAt": "2026-09-22T10:00:03.4641703Z",
+      "localPath": "reference/cache/docs/2026-09-22",
+      "license": "Refer to each official page and future distribution policy",
+      "coverage": "llms index plus 18 linked Markdown pages covering App Server, manual, configuration, models/providers, permissions/sandboxing, hooks, skills, plugins, MCP, SDK, maturity, and open-source notices",
+      "limitations": "Documentation is current at retrieval, not a Codex commit; linked pages may change independently; the harness article was unavailable to local capture",
+      "artifacts": [
+        { "path": "reference/cache/docs/2026-09-22/agent-approvals-security.md", "sha256": "EBF01378A4EA6FD7BEC516ECB99B472E35112E958F1B3995498F8541B4D45E05", "bytes": 34366 },
+        { "path": "reference/cache/docs/2026-09-22/app-server.md", "sha256": "A72A5C88AB05AB9737EC28B432708F2776F696BE48EAE09EE39C02DD2F9480E0", "bytes": 99470 },
+        { "path": "reference/cache/docs/2026-09-22/app.md", "sha256": "B7476F090D8F000298EB111D08736BD5EC031BFBA2D18F4371BC526C25EFCF2B", "bytes": 3641 },
+        { "path": "reference/cache/docs/2026-09-22/build-plugins.md", "sha256": "18567D5287FA63086F393FB46CAF066DB11AA78BD30DDAE90E3615176D9F7739", "bytes": 4879 },
+        { "path": "reference/cache/docs/2026-09-22/build-skills.md", "sha256": "D15791562748E64A53DFEC534B8558AA522E732CEC0FDEDCF7257FA4EF486A20", "bytes": 10925 },
+        { "path": "reference/cache/docs/2026-09-22/codex-cli.md", "sha256": "4592869A38DE248EEF8C623816032BC34787C7797FCF7A64E41D860DA83D1A5E", "bytes": 6668 },
+        { "path": "reference/cache/docs/2026-09-22/codex-manual.md", "sha256": "39C31BC30E944A9C3B33E4A348DF2539DE750E763369F4FA2F56AD921D4B08C5", "bytes": 2337490 },
+        { "path": "reference/cache/docs/2026-09-22/codex-sdk.md", "sha256": "49130C4D5E733FCE538876DA0518F14BA7F3B3A9A14C5EFB3D84694B3EAB6E45", "bytes": 4603 },
+        { "path": "reference/cache/docs/2026-09-22/config-advanced.md", "sha256": "08A695B708B3F9A178751BF4BE7088E4EE598BF8ABA4EF9C67711B117E9279F9", "bytes": 52319 },
+        { "path": "reference/cache/docs/2026-09-22/feature-maturity.md", "sha256": "9B773769AE13AFC594C3C5FD28327009667F0A8FADE51E261EAD9C02C3109E6E", "bytes": 1867 },
+        { "path": "reference/cache/docs/2026-09-22/features.md", "sha256": "A30255F6EA3062DC2FF51E1268F7E18065F7321C52A8599D1CA9A370959393BB", "bytes": 6172 },
+        { "path": "reference/cache/docs/2026-09-22/hooks.md", "sha256": "6B4C549C4F1DF78E802F289151E54F7677128B8A9929912AFB7E8ECD975D2CE9", "bytes": 45547 },
+        { "path": "reference/cache/docs/2026-09-22/llms.txt", "sha256": "8723BCE33E7E2B00AC3C7DCEAC7DC03BA1BC917B1125895D48413E74B4E61175", "bytes": 26063 },
+        { "path": "reference/cache/docs/2026-09-22/mcp.md", "sha256": "41F531ED9200F16CDA4519D632E42589C40F50671BD370CE45CF8F1EBF67FA2D", "bytes": 20179 },
+        { "path": "reference/cache/docs/2026-09-22/models.md", "sha256": "DCB7016EF86122866FC2F6839569A1123F7F6138799D6607F1F288CD5477D23A", "bytes": 18714 },
+        { "path": "reference/cache/docs/2026-09-22/open-source.md", "sha256": "1BD29EA9F6D4148FB7A01D528F4985DC20EC25F109AC500B9F109A032AFD399F", "bytes": 3701 },
+        { "path": "reference/cache/docs/2026-09-22/permission-modes.md", "sha256": "569D287A163EAF664B60802451E05A082D2843CC3C405AF9CFB0782E63181530", "bytes": 2339 },
+        { "path": "reference/cache/docs/2026-09-22/permissions.md", "sha256": "A4EF92666FCFF0FCEB7AB5332588585D3B4958909263E5576BF54DD14ACF022E", "bytes": 36813 },
+        { "path": "reference/cache/docs/2026-09-22/sandboxing.md", "sha256": "5AD1DF07686EE8BE1BBF27178D3C41BA004323DC23549BDA7B147E1E3023AF9B", "bytes": 11146 }
+      ]
+    },
+    {
+      "id": "CODEX-PROTOCOL-GENERATED-0.155.1",
+      "kind": "generated-contract",
+      "status": "generated-and-indexed",
+      "role": "version-specific App Server contract evidence",
+      "originalUrl": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-pc-windows-msvc.exe.zip",
+      "resolvedUrl": "same as original URL",
+      "release": "rust-v0.155.1",
+      "commit": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+      "retrievedAt": "2026-09-22T10:07:07.3836073Z",
+      "localPath": "reference/cache/codex/rust-v0.155.1/protocol-generated",
+      "license": "Derived from the upstream Codex protocol source; preserve applicable upstream notices",
+      "coverage": "Stable and experimental TypeScript and JSON Schema outputs generated by the matching codex-cli binary; 2,331 files total",
+      "limitations": "Generated artifacts are ignored cache outputs and were not compiled into a NeoBabylon application; experimental outputs are not a stability promise",
+      "artifacts": [
+        {
+          "path": "reference/cache/codex/rust-v0.155.1/metadata/protocol-generated.sha256.json",
+          "sha256": "927379241B12B3C0CAD7F4D2F77AC8B72648653F066106C410A587E9D29BA5A8",
+          "bytes": 549552
+        }
+      ]
+    },
+    {
+      "id": "CODEX-SUPPLEMENTAL-COMPARISONS-2026-09-22",
+      "kind": "comparison-material",
+      "status": "captured",
+      "role": "non-baseline comparison evidence",
+      "originalUrl": "https://raw.githubusercontent.com/openai/codex/main/codex-rs/model-provider-info/src/lib.rs; https://raw.githubusercontent.com/facebook/astryx/main/packages/core/README.md; https://raw.githubusercontent.com/facebook/astryx/main/packages/core/package.json; https://raw.githubusercontent.com/facebook/astryx/main/LICENSE",
+      "resolvedUrl": "same as original URLs",
+      "release": "unversioned main branches at retrieval",
+      "commit": null,
+      "retrievedAt": "2026-09-22T10:01:11.6276855Z",
+      "localPath": "reference/cache/supplemental",
+      "license": "Astryx package metadata declares MIT; Codex comparison source follows upstream notices",
+      "coverage": "Current-main provider source plus Astryx core README, package metadata, and license",
+      "limitations": "Unpinned branches; comparison only; no production dependency selection",
+      "artifacts": [
+        { "path": "reference/cache/supplemental/codex-main-model-provider-info-lib.rs", "sha256": "B13A7A905BF4B31C503228EA0F9EA016F9B6376DA9473E77974E7FC13D28EC51", "bytes": 30498 },
+        { "path": "reference/cache/supplemental/astryx-core-README.md", "sha256": "0C947D86494FFE001BA3750603F4426C4BB2ECAE475AA4B5DA469CA3BFC0689F", "bytes": 13227 },
+        { "path": "reference/cache/supplemental/astryx-core-package.json", "sha256": "43470DA5708BCCA7CB70F9CB96EB3B848BD8B409567BBD2E858A2B5C0B22D374", "bytes": 23335 },
+        { "path": "reference/cache/supplemental/astryx-LICENSE", "sha256": "A6855BE541FC8F446ACD1BC4F2F8EFCE1ACE6DCE71DBA32FCD8DA553EE54B473", "bytes": 1077 }
+      ]
+    },
+    {
+      "id": "CODEX-HARNESS-ARTICLE",
+      "kind": "supplemental-document",
+      "status": "unavailable",
+      "role": "optional context only",
+      "originalUrl": "https://openai.com/index/unlocking-the-codex-harness/",
+      "resolvedUrl": null,
+      "release": null,
+      "commit": null,
+      "retrievedAt": "2026-09-22T10:07:05.0268542Z",
+      "localPath": null,
+      "license": null,
+      "coverage": "Not captured locally",
+      "limitations": "PowerShell retrieval returned HTTP 403 with a Cloudflare challenge; no claim in the build plan depends on this article",
+      "artifacts": []
+    }
+  ]
+}

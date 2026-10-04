@@ -1,0 +1,289 @@
+{
+  "providerId": "openrouter",
+  "providerDisplayName": "OpenRouter",
+  "providerServerVersion": "Unknown",
+  "endpoint": "https://openrouter.ai/api/v1",
+  "modelIdentifier": "nex-agi/nex-n2.5-pro:free",
+  "modelVariant": "nex-agi/nex-n2.5-pro-20260907",
+  "architecture": "Qwen3",
+  "parameterCount": "Unknown",
+  "modelSizeBytes": "Unknown",
+  "quantization": {
+    "state": "Known",
+    "value": "fp8",
+    "evidenceSource": "OpenRouter GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints (2026-09-22)"
+  },
+  "providerRoute": {
+    "state": "Known",
+    "value": {
+      "providerName": "Nex AGI",
+      "providerSlug": "nex-agi",
+      "endpointTag": "nex-agi/fp8",
+      "quantization": "fp8",
+      "modelExpirationDate": "2026-09-25",
+      "endpointExpirationDate": "Unknown"
+    },
+    "evidenceSource": "OpenRouter GET /api/v1/models and GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints (2026-09-23)",
+    "note": "The model catalog reports expiration_date=2026-09-25; the endpoint response has no endpoint-specific expiration_date, so endpoint expiry remains Unknown. This is the currently advertised exact provider endpoint."
+  },
+  "contextWindowAdvertised": {
+    "state": "Known",
+    "value": 262144,
+    "evidenceSource": "OpenRouter GET /api/v1/models and model endpoints (2026-09-22)"
+  },
+  "contextWindowEffective": {
+    "state": "Known",
+    "value": 262144,
+    "evidenceSource": "OpenRouter GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints context_length, 2026-09-23",
+    "note": "Provider-effective context ceiling before Codex's adapter allowance. Codex's 95 percent usable-context projection is recorded separately in each qualification run and must not be fed back here; doing so applies the allowance twice."
+  },
+  "maxCompletionTokensAdvertised": {
+    "state": "Known",
+    "value": 235929,
+    "evidenceSource": "OpenRouter GET /api/v1/models and GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints (2026-09-23):max_completion_tokens",
+    "note": "Typed source for the Codex catalog completion ceiling. The earlier agentMetadata note predates this mapping and is retained for exact legacy saved-thread identity. The model catalog reported expiration_date=2026-09-25; this is not a current endpoint-availability attestation."
+  },
+  "reasoningControls": {
+    "state": "Known",
+    "value": {
+      "mandatory": false,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "none"
+      ],
+      "default_effort": "high"
+    },
+    "evidenceSource": "OpenRouter GET /api/v1/models (2026-09-23)",
+    "note": "Provider-advertised supported levels/default are mapped to the Codex catalog. The live session journal does not independently record the effective reasoning effort; the deterministic Responses fixture observed effort=high."
+  },
+  "toolFunctionCalling": {
+    "state": "Known",
+    "value": "tool_use",
+    "evidenceSource": "OpenRouter model endpoint supported_parameters and supports_tool_choice (2026-09-23), plus one live App Server function-call/output round trip (2026-09-23)",
+    "note": "One exec_command call and its output continuation completed in the pinned App Server path; this does not qualify other tool types."
+  },
+  "applyPatchToolType": {
+    "state": "Known",
+    "value": "function",
+    "evidenceSource": "NeoBabylon Codex App Server 0.155.1 live function-form apply_patch round trip for nex-agi/nex-n2.5-pro:free via nex-agi/fp8 (2026-09-23); see docs/release/VERIFICATION.md",
+    "note": "The model called the single advertised function-form apply_patch tool, its matching function_call_output continued the same turn, and the isolated task retained a fileChange review. This qualifies function-form apply_patch for this exact model and route only; it is not inferred from generic tool_use metadata."
+  },
+  "structuredOutput": {
+    "state": "Known",
+    "value": {
+      "response_format": true,
+      "structured_outputs": true,
+      "json_schema": true
+    },
+    "evidenceSource": "OpenRouter model endpoint supported_parameters and model capability page (2026-09-23)",
+    "note": "Provider-advertised only; no live structured-output request was performed, and this metadata is not represented as an effective Codex structured-output control."
+  },
+  "agentMetadata": {
+    "state": "Known",
+    "value": "type=llm; state=available; provider=Nex AGI; tokenizer=Qwen3; inputModalities=text,image; outputModalities=text; maxCompletionTokens=235929; expirationDate=2026-09-25",
+    "evidenceSource": "OpenRouter GET /api/v1/models and GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints (2026-09-23)",
+    "note": "The expirationDate token is the model catalog's expiration_date; endpoint-specific expiration is Unknown. Route attribution, zero cost for individual runs, streaming, and Codex effective context are qualification evidence recorded separately, not provider agent metadata. maxCompletionTokens is advertised and recorded but is not mapped as an enforced Codex output cap. The user states the selected key is restricted to free models; that restriction was not independently inspectable."
+  },
+  "qualifiedRunAttestation": {
+    "state": "Known",
+    "provider": "Nex AGI",
+    "model": "nex-agi/nex-n2.5-pro-20260907:free",
+    "totalCost": 0,
+    "isByok": false,
+    "streamed": true,
+    "apiType": "completions",
+    "router": null,
+    "generationIds": [
+      "gen-1790125061-aFqRacmN8snPhT26jA1y",
+      "gen-1790125070-lGuHWtIpRUTH82J3vEPr"
+    ],
+    "scope": "Two provider generations in one route-pinned isolated App Server tool turn on 2026-09-23. OpenRouter attested provider Nex AGI, the returned free model, zero cost, and streaming for each. The generation response does not echo the endpoint tag or request routing object; the exact endpoint tag and no-fallback request shape are supported by the pinned runtime identity, source tests, and pre-request route snapshot, not by this post-request response alone.",
+    "reportedUsageCounters": {
+      "openRouterGenerationApi": {
+        "usage": 0,
+        "tokensPrompt": 0,
+        "tokensCompletion": 0,
+        "nativeTokensPrompt": 0,
+        "nativeTokensCompletion": 0,
+        "nativeTokensReasoning": 0
+      },
+      "codexSession": {
+        "inputTokensAcrossTwoGenerations": 12565,
+        "outputTokensAcrossTwoGenerations": 230,
+        "reasoningOutputTokensAcrossTwoGenerations": 69
+      },
+      "status": "Inconsistent",
+      "note": "OpenRouter generation lookups returned zero usage counters while the isolated Codex session journal recorded nonzero token usage. Do not treat the provider-generation token counters as verified usage for this run."
+    },
+    "evidenceSource": "OpenRouter GET /api/v1/generation?id=gen-1790125061-aFqRacmN8snPhT26jA1y and id=gen-1790125070-lGuHWtIpRUTH82J3vEPr (2026-09-23), plus the isolated App Server session journal; https://openrouter.ai/docs/api/api-reference/generations/get-generation"
+  },
+  "liveLargeOutputQualification": {
+    "state": "Known",
+    "observedDate": "2026-09-25",
+    "provider": "OpenRouter / Nex AGI",
+    "requestedModelAlias": "nex-agi/nex-n2.5-pro:free",
+    "resolvedModel": "nex-agi/nex-n2.5-pro:free",
+    "requestRoute": {
+      "endpointTag": "nex-agi/fp8",
+      "fallbacksDisabled": true,
+      "routeTagPostHocAttested": false
+    },
+    "request": {
+      "apiSurface": "OpenRouter Responses API direct qualification; no App Server or WPF client",
+      "streaming": true,
+      "maxOutputTokens": 8192,
+      "toolChoice": "none",
+      "tools": []
+    },
+    "response": {
+      "status": "completed",
+      "outputCharacters": 19233,
+      "outputUtf8Bytes": 19251,
+      "outputSha256": "c15e1607b46c23dc7ff63021057d579f70d292f0d618fe3e1ff110ec49bb996a",
+      "inputTokens": 107,
+      "outputTokens": 4056,
+      "reportedReasoningTokens": 706,
+      "totalTokens": 4163,
+      "reportedCost": 0,
+      "isByok": false,
+      "timeToFirstTextMs": 24724,
+      "totalElapsedMs": 140581,
+      "generationLookup": "HTTP 404; provider-side generation detail unavailable"
+    },
+    "scope": "One bounded live streaming response completed above the prior 4,096-token cap. The exact requested/resolved model alias, zero reported cost, no-tool request, and streaming result are recorded from the Responses response; the generation lookup returned 404. The endpoint tag was request-pinned but not post-hoc attested. This does not prove WPF/WebView2 plus App Server live-output rendering, memory bounds, cancellation, persisted reconstruction, or arbitrary-size support.",
+    "credentialHandling": "User-authorized free-model credential read from the existing Pi auth store into the isolated test process only; the value was not logged or persisted. The user-stated free-only key restriction is not independently inspectable.",
+    "evidenceSource": "D:\\CODING\\NeoBabylon-Data\\QA\\P2-11-live-nex\\P2-11-live-nex-20260925-d79fdb1b8743481299ffd2b3b7902247\\result.json; tests/qa/p2-11-live-nex-output.mjs; preflight and Responses API result (2026-09-25)"
+  },
+  "liveLargeOutputRepeat": {
+    "state": "Known",
+    "observedDate": "2026-09-25",
+    "provider": "OpenRouter / Nex AGI",
+    "requestedModelAlias": "nex-agi/nex-n2.5-pro:free",
+    "resolvedModel": "nex-agi/nex-n2.5-pro:free",
+    "requestRoute": {
+      "endpointTag": "nex-agi/fp8",
+      "fallbacksDisabled": true,
+      "routeTagPostHocAttested": false
+    },
+    "request": {
+      "apiSurface": "OpenRouter Responses API direct qualification; no App Server or WPF client",
+      "streaming": true,
+      "maxOutputTokens": 8192,
+      "toolChoice": "none",
+      "tools": []
+    },
+    "response": {
+      "status": "completed",
+      "outputCharacters": 18704,
+      "outputUtf8Bytes": 18722,
+      "outputSha256": "bbc66720b0cd8f170c36cb6d6e7a5562e8a05733747be9f9f1d8a2c314cc6575",
+      "inputTokens": 107,
+      "outputTokens": 3877,
+      "reportedReasoningTokens": 671,
+      "totalTokens": 3984,
+      "reportedCost": 0,
+      "isByok": false,
+      "timeToFirstTextMs": 68402,
+      "totalElapsedMs": 258192,
+      "generationLookup": "HTTP 404; provider-side generation detail unavailable"
+    },
+    "scope": "A second bounded live streaming response completed above the prior 4,096-token cap. It independently confirms the exact requested/resolved model alias, zero reported cost, no-tool request, and streaming completion. The endpoint tag was request-pinned but not post-hoc attested. This still does not prove WPF/WebView2 plus App Server live-output rendering, memory bounds, cancellation, persisted reconstruction, or arbitrary-size support.",
+    "credentialHandling": "User-authorized free-model credential read from the existing Pi auth store into the isolated test process only; the value was not logged or persisted. The user-stated free-only key restriction is not independently inspectable.",
+    "evidenceSource": "D:\\CODING\\NeoBabylon-Data\\QA\\P2-11-live-nex-pi-auth-20260925\\result.json; tests/qa/p2-11-live-nex-output.mjs; OpenRouter Responses API preflight/result and model listing (2026-09-25)"
+  },
+  "latestQualificationAttestation": {
+    "state": "Known",
+    "observedDate": "2026-09-24",
+    "runtimeIdentity": {
+      "version": "0.155.1",
+      "sourceRevision": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+      "binarySha256": "636f221667c00499e4ea4bffd9a18bf0f02412e71594700c0d55d72e2709f318",
+      "sourcePatchSha256": "a0a7cd319a31f2125195e7087be72a2867be4779edf00c686ec85f42c58cf520"
+    },
+    "applicationRoots": {
+      "applicationRoot": "D:\\CODING\\NeoBabylon-Data\\Phase1B-NEX-Free-Retry-20260924",
+      "dataRoot": "D:\\CODING\\NeoBabylon-Data\\Phase1B-NEX-Free-Retry-20260924\\Data",
+      "codexHome": "D:\\CODING\\NeoBabylon-Data\\Phase1B-NEX-Free-Retry-20260924\\Data\\CodexHome",
+      "workspace": "D:\\CODING\\NeoBabylon-Data\\Phase1B-NEX-Free-Retry-20260924\\Data\\Workspace",
+      "sourceRepositoryRoot": "D:\\CODING\\NeoBabylon",
+      "ordinaryCodexRootUsed": false
+    },
+    "requestPreflight": {
+      "modelAlias": "nex-agi/nex-n2.5-pro:free",
+      "endpointCount": 1,
+      "providerName": "Nex AGI",
+      "endpointTag": "nex-agi/fp8",
+      "endpointStatusRaw": -2,
+      "endpointStatusSemantics": "Unknown",
+      "promptPrice": 0,
+      "completionPrice": 0,
+      "modelExpirationDate": "2026-09-25",
+      "endpointExpirationDate": "Unknown",
+      "fallbacksDisabled": true,
+      "endpointTagPostHocAttested": false
+    },
+    "liveToolRoundTrip": {
+      "surface": "host qualification harness; no WPF interaction",
+      "requestedModelAlias": "nex-agi/nex-n2.5-pro:free",
+      "terminalStatus": "completed",
+      "toolType": "function",
+      "toolName": "apply_patch",
+      "fileChanged": "Workspace/tracked.txt",
+      "before": "before",
+      "after": "after",
+      "attributedDiffEvents": 3,
+      "savedReviews": 1,
+      "effectiveContextWindow": 249036,
+      "effectiveReasoningEffort": "Unknown; journal value null",
+      "credentialPatternFoundInApplicationRoot": false
+    },
+    "providerGenerations": {
+      "generationIds": [
+        "gen-1790219773-7Yp5QQTDULNiZI3a0it9",
+        "gen-1790219786-pq4zy200aoSHTlFHJB3E"
+      ],
+      "provider": "Nex AGI",
+      "returnedModel": "nex-agi/nex-n2.5-pro-20260907:free",
+      "totalCost": 0,
+      "isByok": false,
+      "streamed": true,
+      "apiType": "completions",
+      "openRouterUsageCounters": {
+        "promptTokens": 0,
+        "completionTokens": 0
+      },
+      "codexSessionCounters": {
+        "inputTokens": 12117,
+        "outputTokens": 133,
+        "totalTokens": 12250
+      },
+      "usageAttribution": "Inconsistent; OpenRouter generation counters are zero while the Codex session journal records nonzero usage."
+    },
+    "credentialHandling": "User-supplied free-only key entered through a hidden one-shot prompt and held in process memory; no key value was persisted. User-stated free-only restriction is not independently inspectable.",
+    "evidenceSource": "Host qualification output, isolated Codex session journal, read-only OpenRouter generation lookups, and 2026-09-24 OpenRouter models/endpoints preflight; see docs/release/VERIFICATION.md"
+  },
+  "toolQualifications": [
+    {
+      "operationId": "exec_command",
+      "state": "qualified",
+      "observedOn": "2026-09-23",
+      "scope": "One ordinary exec_command call and output continuation completed through the pinned App Server path for the NEX free-model alias. This does not qualify other tool types or the broader failure matrix.",
+      "evidenceSource": "docs/release/PHASE1B_OPENROUTER.md — initial NEX ordinary tool round trip; docs/release/VERIFICATION.md"
+    },
+    {
+      "operationId": "apply_patch",
+      "state": "qualified",
+      "observedOn": "2026-09-24",
+      "scope": "One function-form apply_patch call completed through the pinned App Server path for the NEX free-model alias. The request was pinned to nex-agi/fp8 with fallback disabled; the returned generation did not post-hoc attest the endpoint tag.",
+      "evidenceSource": "docs/release/PHASE1B_OPENROUTER.md — exact NEX free-route live function-tool round trip; docs/release/VERIFICATION.md"
+    },
+    {
+      "operationId": "view_image",
+      "state": "advertised",
+      "observedOn": "2026-09-23",
+      "scope": "The provider catalog advertised text and image input for this model. No Codex image-tool list or live image call was verified.",
+      "evidenceSource": "OpenRouter GET /api/v1/models and GET /api/v1/models/nex-agi/nex-n2.5-pro%3Afree/endpoints; docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Screenshots and vision"
+    }
+  ]
+}

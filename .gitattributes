@@ -1,0 +1,12 @@
+* text=auto eol=crlf
+*.md text
+*.json text
+*.toml text
+*.rs text
+*.ts text
+*.tsx text
+*.ps1 text
+*.bat text
+*.exe binary
+*.zip binary
+

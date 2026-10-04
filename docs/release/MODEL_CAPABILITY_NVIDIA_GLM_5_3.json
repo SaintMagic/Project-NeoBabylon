@@ -1,0 +1,83 @@
+{
+  "providerId": "nvidia",
+  "providerDisplayName": "NVIDIA NIM",
+  "providerServerVersion": "Unknown",
+  "endpoint": "https://integrate.api.nvidia.com/v1",
+  "modelIdentifier": "z-ai/glm-5.3",
+  "modelVariant": "GLM-5.3",
+  "architecture": "Transformer / Mixture-of-Experts",
+  "parameterCount": "753B total; approximately 40B active",
+  "modelSizeBytes": "Unknown",
+  "quantization": {
+    "state": "Known",
+    "value": "NVFP4",
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04): Inference and Known Limitations",
+    "note": "The NVIDIA model card explicitly describes this endpoint as an NVFP4-quantized checkpoint. No local model file or runtime precision inspection occurred."
+  },
+  "providerRoute": {
+    "state": "Known",
+    "value": {
+      "providerName": "NVIDIA NIM",
+      "providerSlug": "nvidia",
+      "endpointTag": "integrate.api.nvidia.com"
+    },
+    "evidenceSource": "Authenticated GET https://integrate.api.nvidia.com/v1/models (2026-10-04); official https://build.nvidia.com/z-ai/glm-5-3/modelcard",
+    "note": "The exact model identifier is in the NVIDIA catalog. No backing deployment ID or provider/server version is exposed by this discovery; no post-hoc identity guarantee is inferred."
+  },
+  "contextWindowAdvertised": {
+    "state": "Known",
+    "value": 1048576,
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04): model context specification",
+    "note": "Provider-published model limit, not a measured hosted effective context or usable-context projection."
+  },
+  "contextWindowEffective": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "No NeoBabylon/pinned Codex effective-model event for this tuple observed as of 2026-10-04",
+    "note": "Do not mark the advertised model-card limit as a verified effective limit."
+  },
+  "maxCompletionTokensAdvertised": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "NVIDIA hosted API reference and model card consulted 2026-10-04",
+    "note": "No authoritative endpoint maximum was established. The accepted NeoBabylon fallback is 32768 tokens with a user override; example/default values are not maximums."
+  },
+  "reasoningControls": {
+    "state": "Known",
+    "value": {
+      "supported_efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "default_effort": "max"
+    },
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04): Input",
+    "note": "These exact provider-reported string levels are supported by the pinned Codex enum. No GPT-family defaults are used; live enforcement is not yet qualified."
+  },
+  "toolFunctionCalling": {
+    "state": "Known",
+    "value": "tool_use",
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04): tool/function calling",
+    "note": "Advertised by the provider's official model card; not yet a real Codex tool round-trip qualification."
+  },
+  "applyPatchToolType": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "No Codex-specific apply_patch wire-format qualification for this NVIDIA tuple",
+    "note": "Generic function calling does not establish support for Codex freeform/custom tools."
+  },
+  "structuredOutput": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04)",
+    "note": "Specific hosted JSON/JSON-schema modes and enforcement are not established. The bounded adapter rejects unsupported structured-output requests instead of inventing capability."
+  },
+  "agentMetadata": {
+    "state": "Known",
+    "value": "type=llm; provider=NVIDIA NIM; providerInputModalities=text; inputModalities=text; outputModalities=text; transport=responses-to-chat-completions-adapter",
+    "evidenceSource": "https://build.nvidia.com/z-ai/glm-5-3/modelcard (consulted 2026-10-04); authenticated GET https://integrate.api.nvidia.com/v1/models (2026-10-04)",
+    "note": "Provider modalities remain distinct from adapter exposure: the approved first adapter maps text and function tools only. Image, custom/freeform, stateful Responses, and unqualified controls are not enabled. Hosted /v1/responses POST returned HTTP 404; the explicit adapter is required. This record does not qualify compaction, a live turn, or generated-tool activation."
+  },
+  "toolQualifications": []
+}

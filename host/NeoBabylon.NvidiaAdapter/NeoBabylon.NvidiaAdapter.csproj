@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseAppHost>true</UseAppHost>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NvidiaAdapterTestBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);NVIDIA_ADAPTER_TEST_BUILD</DefineConstants>
+  </PropertyGroup>
+</Project>

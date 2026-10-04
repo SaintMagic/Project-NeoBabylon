@@ -1,0 +1,83 @@
+{
+  "providerId": "openrouter",
+  "providerDisplayName": "OpenRouter",
+  "providerServerVersion": "Unknown",
+  "endpoint": "https://openrouter.ai/api/v1",
+  "modelIdentifier": "inclusionai/ling-3.1-flash",
+  "modelVariant": "inclusionai/ling-3.1-flash-20261002",
+  "architecture": "Hybrid reasoning / mixture-of-experts; text->text",
+  "parameterCount": "560B total; 25B active (OpenRouter model listing)",
+  "modelSizeBytes": "Unknown",
+  "quantization": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04)",
+    "note": "The endpoint explicitly reports quantization=unknown. No precision or quant is inferred."
+  },
+  "providerRoute": {
+    "state": "Known",
+    "value": {
+      "providerName": "Novita",
+      "providerSlug": "novita",
+      "endpointTag": "novita"
+    },
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):provider_name, tag, status",
+    "note": "Exactly one available Novita endpoint was observed. Preserve hard route pinning and disabled fallbacks; catalog metadata does not attest an actual served route."
+  },
+  "contextWindowAdvertised": {
+    "state": "Known",
+    "value": 262144,
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):context_length",
+    "note": "Provider-advertised limit, not a measured effective or usable context."
+  },
+  "contextWindowEffective": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04)",
+    "note": "No pinned Codex effective-model event or live context qualification has been observed for this tuple. The catalog may use the sourced advertised context; do not relabel it as effective."
+  },
+  "maxCompletionTokensAdvertised": {
+    "state": "Known",
+    "value": 32768,
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):max_completion_tokens",
+    "note": "Use this sourced provider maximum for the accepted default cap; explicit overrides remain bounded. No live cap enforcement is qualified for this tuple."
+  },
+  "reasoningControls": {
+    "state": "Known",
+    "value": {
+      "control_type": "enabled",
+      "mandatory": false,
+      "default_enabled": true
+    },
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models (2026-10-04T08:59:53–54Z): exact model.reasoning; local raw receipt .local/Lab/Runs/Context-Reasoning-20261004/openrouter-reasoning-discovery.json",
+    "note": "Provider-advertised On/Off control, enabled by default. supported_efforts is omitted in the public API; no native effort list or default effort is inferred. Pinned Codex exposes effort, not Boolean reasoning.enabled; do not substitute none/medium aliases. Two exact-Novita bounded compatibility probes returned HTTP 429, so effective reasoning remains unqualified. Original capability record and saved-thread identities remain preserved."
+  },
+  "toolFunctionCalling": {
+    "state": "Known",
+    "value": "tool_use",
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):tools, tool_choice, supports_tool_choice",
+    "note": "Function tools are advertised. tool_choice none/auto/function=true, required=false. This is not a real Codex tool round-trip qualification."
+  },
+  "applyPatchToolType": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04)",
+    "note": "Generic function support does not establish a Codex-specific apply_patch wire format."
+  },
+  "structuredOutput": {
+    "state": "Known",
+    "value": {
+      "response_format": false,
+      "json_schema": false
+    },
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):supported_parameters; https://openrouter.ai/inclusionai/ling-3.1-flash",
+    "note": "response_format is not advertised and the official model page says JSON output is not enforced. No structured-output request or schema enforcement has been qualified."
+  },
+  "agentMetadata": {
+    "state": "Known",
+    "value": "type=llm; provider=Novita; inputModalities=text; outputModalities=text; promptPrice=0; completionPrice=0; reasoningMandatory=false; reasoningDefaultEnabled=true",
+    "evidenceSource": "Public OpenRouter GET https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/inclusionai/ling-3.1-flash/endpoints (2026-10-04):architecture, pricing, reasoning",
+    "note": "Prices and capabilities are discovery-time metadata, not entitlement, privacy, charging or live inference guarantees. This replaces NEX only in new selection; historical NEX evidence and chat identities remain unchanged."
+  },
+  "toolQualifications": []
+}

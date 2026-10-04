@@ -1,0 +1,75 @@
+{
+  "providerId": "openrouter",
+  "providerDisplayName": "OpenRouter",
+  "providerServerVersion": "Unknown",
+  "endpoint": "https://openrouter.ai/api/v1",
+  "modelIdentifier": "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "modelVariant": "nvidia/nemotron-3-ultra-550b-a55b-20260604:free",
+  "architecture": "Unknown",
+  "parameterCount": "Unknown",
+  "modelSizeBytes": "Unknown",
+  "quantization": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints (2026-09-26)",
+    "note": "The endpoint reports quantization=unknown; no format is inferred."
+  },
+  "providerRoute": {
+    "state": "Known",
+    "value": {
+      "providerName": "Nvidia",
+      "providerSlug": "nvidia",
+      "endpointTag": "nvidia"
+    },
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints (2026-09-26)",
+    "note": "The bare provider tag is observed. The pre-patch locked App Server 0.155.1 rejected provider-only tags before a turn in the 2026-09-26 QA probe; this record does not qualify a live route or make this model a default."
+  },
+  "contextWindowAdvertised": {
+    "state": "Known",
+    "value": 1000000,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models: exact nvidia/nemotron-3-ultra-550b-a55b:free context_length (2026-09-26)"
+  },
+  "contextWindowEffective": {
+    "state": "Known",
+    "value": 1000000,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:context_length (2026-09-26)",
+    "note": "Provider endpoint ceiling before Codex's separate 95 percent usable-context projection; no live Codex effective-context event has been observed for this tuple."
+  },
+  "maxCompletionTokensAdvertised": {
+    "state": "Known",
+    "value": 65536,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:max_completion_tokens (2026-09-26)",
+    "note": "Typed source for the Codex catalog completion ceiling. The earlier agentMetadata note predates this mapping and is retained for exact legacy saved-thread identity. No live App Server output-cap enforcement has been qualified for this tuple."
+  },
+  "reasoningControls": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:supported_parameters (2026-09-26)",
+    "note": "reasoning, include_reasoning, and reasoning_effort are advertised by the endpoint. The model listing also advertises high/medium efforts and high default, but this record intentionally leaves endpoint-specific levels/default Unknown pending selected-tuple qualification; no Codex reasoning level is mapped."
+  },
+  "toolFunctionCalling": {
+    "state": "Known",
+    "value": "tool_use",
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:supported_parameters and supports_tool_choice (2026-09-26)",
+    "note": "tools and tool_choice are advertised, including none, auto, required, and function. No live App Server or named private MCP round trip is qualified."
+  },
+  "applyPatchToolType": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "OpenRouter endpoint metadata (2026-09-26)",
+    "note": "Generic tool calling does not qualify either Codex apply_patch wire type."
+  },
+  "structuredOutput": {
+    "state": "Unknown",
+    "value": null,
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:supported_parameters (2026-09-26)",
+    "note": "No positive structured-output capability was established by this endpoint response."
+  },
+  "agentMetadata": {
+    "state": "Known",
+    "value": "inputModalities=text; outputModalities=text; maxCompletionTokens=65536",
+    "evidenceSource": "OpenRouter GET https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b%3Afree/endpoints:architecture and max_completion_tokens (2026-09-26)",
+    "note": "The advertised completion limit is recorded but is not mapped to an enforced Codex output cap. Only observed text modalities are provided to the catalog builder."
+  },
+  "toolQualifications": []
+}

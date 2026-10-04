@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "product": "NeoBabylon",
+  "runtime": {
+    "kind": "Codex App Server",
+    "version": "0.155.1",
+    "sourceRepository": "https://github.com/openai/codex.git",
+    "sourceRef": "rust-v0.155.1",
+    "sourceRevision": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+    "sourceCheckoutRelativePath": ".local/Runtime/NeoBabylon-Runtime",
+    "appServerBinaryRelativePath": ".local/Runtime/LockedBuild/20261003-a0c3ebdc/codex-app-server.exe",
+    "platform": "x86_64-pc-windows-msvc",
+    "sha256": "a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386",
+    "protocol": "stable",
+    "execution": "local-source-build-openrouter-route-pin-function-apply-patch-unrestricted-tools",
+    "sourcePatchSha256": "cce8de430fd6bd1d8f4842ff3768bef9d185fce02ad83d62812e653595584dde"
+  }
+}

@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "1",
+  "observedOn": "2026-09-25",
+  "upstreamRuntime": {
+    "version": "0.155.1",
+    "sourceRevision": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+    "sourceInventory": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md"
+  },
+  "interpretation": "This is a read-only description of NeoBabylon exposure and selected-tuple evidence. Upstream source presence is not provider support or permission. A recorded qualification means only the exact scoped run stated in that model capability record; Unknown is never promoted by inference.",
+  "categories": [
+    {
+      "id": "built-in-tools",
+      "title": "Built-in tools",
+      "items": [
+        {
+          "id": "app-server-tool-activity",
+          "name": "App Server tool activity",
+          "description": "Selected tool, patch, MCP, and function-output events can appear in conversation activity. There is no complete catalog or per-tool enablement screen.",
+          "exposure": {
+            "state": "partial",
+            "label": "Selected activity only",
+            "permissionSource": "Codex App Server owns tool execution and approval. The effective authority for this session is shown in Runtime diagnostics; the P3-02 per-operation failure matrix remains open.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Built-in tools; docs/release/P3-02_EXPOSED_SURFACE_EVIDENCE.md"
+          },
+          "qualification": {
+            "kind": "metadata",
+            "capabilityField": "toolFunctionCalling"
+          }
+        }
+      ]
+    },
+    {
+      "id": "browser-computer",
+      "title": "Browser and computer use",
+      "items": [
+        {
+          "id": "browser-computer-use",
+          "name": "Browser/computer execution",
+          "description": "WebView2 renders NeoBabylon itself; it is not a model browser or computer-use operation.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon callable operation exists for this category.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Browser/computer use; ui/diagnostic/src/bridge.ts"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "browser_computer_use"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision",
+      "title": "Screenshots and vision",
+      "items": [
+        {
+          "id": "view-image",
+          "name": "Image input (view_image)",
+          "description": "There is no product image picker or screenshot capture. Upstream image-tool availability alone does not prove this selected model can consume an image.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "No product image surface",
+            "permissionSource": "No NeoBabylon image-picker or screenshot operation is exposed; model-directed tools still use the selected App Server authority.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Screenshots and vision"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "view_image"
+          }
+        }
+      ]
+    },
+    {
+      "id": "large-documents",
+      "title": "Large documents and output",
+      "items": [
+        {
+          "id": "saved-output-paging",
+          "name": "Saved tool-output paging",
+          "description": "The UI can inspect bounded ranges of an existing saved App Server output. This is not an arbitrary-document reader, and omitted source text may not be recoverable.",
+          "exposure": {
+            "state": "partial",
+            "label": "Saved output only",
+            "permissionSource": "Read-only inspection of the selected saved App Server item; it does not grant a new file-read operation.",
+            "evidenceSource": "docs/release/VERIFICATION.md — P2-11 bounded native large-output; docs/WIP/PHASE3-5_VERTICAL_SLICES.md — P3-04"
+          },
+          "qualification": {
+            "kind": "not-applicable",
+            "evidenceSource": "This is a host/UI inspection behavior, not a provider/model capability."
+          }
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Search",
+      "items": [
+        {
+          "id": "conversation-history-filter",
+          "name": "Conversation-history filtering",
+          "description": "The UI filters loaded saved-history pages; it does not search arbitrary workspace files.",
+          "exposure": {
+            "state": "exposed",
+            "label": "UI history filter",
+            "permissionSource": "Local saved-history view only; no model tool or workspace authority is added.",
+            "evidenceSource": "ui/diagnostic/src/history.mjs; docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Search"
+          },
+          "qualification": {
+            "kind": "not-applicable",
+            "evidenceSource": "This is a local UI filter, not a provider/model search capability."
+          }
+        },
+        {
+          "id": "workspace-web-search",
+          "name": "Workspace/web search tool",
+          "description": "No NeoBabylon workspace-search UI is exposed; provider web-search behavior is unqualified.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon search-tool operation is exposed.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Search"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "web_search"
+          }
+        }
+      ]
+    },
+    {
+      "id": "patch",
+      "title": "Patch application",
+      "items": [
+        {
+          "id": "apply-patch",
+          "name": "Patch application (apply_patch)",
+          "description": "App Server-backed patch activity and review are rendered. A provider's generic tool-use flag is not sufficient to qualify this wire format.",
+          "exposure": {
+            "state": "exposed",
+            "label": "Existing App Server operation",
+            "permissionSource": "Codex App Server owns execution and any review/approval; the effective authority is shown above. Broader denial and failure cases remain open.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Patch; docs/release/P3-02_EXPOSED_SURFACE_EVIDENCE.md"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "apply_patch",
+            "capabilityField": "applyPatchToolType"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shell",
+      "title": "Command execution",
+      "items": [
+        {
+          "id": "exec-command",
+          "name": "Model-directed command (exec_command)",
+          "description": "A command can be requested through an ordinary App Server turn. There is no product shell panel; thread/shellCommand remains human-only.",
+          "exposure": {
+            "state": "exposed",
+            "label": "Existing App Server operation",
+            "permissionSource": "Selected App Server thread authority. NeoBabylon currently uses the explicitly selected unrestricted policy; this is full Windows-user authority, not workspace containment.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Shell; docs/decisions/0008-phase2-unrestricted-tool-authority.md"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "exec_command",
+            "capabilityField": "toolFunctionCalling"
+          }
+        }
+      ]
+    },
+    {
+      "id": "context-compaction",
+      "title": "Context and compaction",
+      "items": [
+        {
+          "id": "effective-context-display",
+          "name": "Effective context display",
+          "description": "The selected record and Runtime diagnostics show provider and Codex effective context evidence separately.",
+          "exposure": {
+            "state": "exposed",
+            "label": "Read-only metadata",
+            "permissionSource": "No execution authority is granted by this display.",
+            "evidenceSource": "ui/diagnostic/src/App.tsx; docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Compaction and context"
+          },
+          "qualification": {
+            "kind": "metadata",
+            "capabilityField": "contextWindowEffective",
+            "whenKnown": "known"
+          }
+        },
+        {
+          "id": "automatic-compaction",
+          "name": "Automatic compaction behavior",
+          "description": "The pinned runtime contains automatic compaction. NeoBabylon does not expose a manual compact control, and live-provider triggering is not qualified.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "No control; runtime-managed",
+            "permissionSource": "Runtime-managed behavior; no NeoBabylon control is exposed.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Compaction and context"
+          },
+          "qualification": {
+            "kind": "unknown",
+            "evidenceSource": "Only deterministic synthetic-context evidence is recorded; live-provider threshold and cross-model behavior are unqualified."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "title": "Skills",
+      "items": [
+        {
+          "id": "skills-runtime",
+          "name": "Skill discovery and execution",
+          "description": "The upstream runtime contains skill-loading code. NeoBabylon exposes no skill catalog or skill-specific operation.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon skill-management operation is exposed; activation state remains Unknown.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Skills"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "skills"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hooks",
+      "title": "Hooks",
+      "items": [
+        {
+          "id": "hooks-runtime",
+          "name": "Hook activation and dispatch",
+          "description": "Upstream hook code exists, but current activation and configuration provenance are unknown. NeoBabylon exposes no hook catalog or control.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon hook-management operation is exposed.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Hooks"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "hooks"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "title": "MCP",
+      "items": [
+        {
+          "id": "mcp-call-activity",
+          "name": "MCP call activity",
+          "description": "Existing App Server-backed call activity may be rendered; this does not discover, configure, or authenticate a server.",
+          "exposure": {
+            "state": "partial",
+            "label": "Activity only",
+            "permissionSource": "App Server execution authority applies to an existing configured server. NeoBabylon does not expose configuration or authentication.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — MCP"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "mcp_tool_call"
+          }
+        },
+        {
+          "id": "mcp-setup",
+          "name": "MCP discovery and setup",
+          "description": "Server discovery, setup, status, and authentication are not available in the product UI.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon MCP-management operation is exposed.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — MCP"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "mcp_setup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "plugins",
+      "title": "Plugins",
+      "items": [
+        {
+          "id": "plugins-management",
+          "name": "Plugin install and enablement",
+          "description": "No NeoBabylon plugin catalog, install, or enable operation is exposed. Installed upstream state is unknown.",
+          "exposure": {
+            "state": "not-exposed",
+            "label": "Not exposed",
+            "permissionSource": "No NeoBabylon plugin-management operation is exposed. Packaging/install work is separately deferred.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Plugins; NB-DEC-010"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "plugins"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dynamic-tools",
+      "title": "Dynamic tools",
+      "items": [
+        {
+          "id": "dynamic-tool-registration",
+          "name": "Dynamic tool registration",
+          "description": "Registration is experimental in the pinned protocol and remains off in NeoBabylon's selected stable protocol. A rendered dynamic-tool event does not enable registration.",
+          "exposure": {
+            "state": "experimental-off",
+            "label": "Experimental · off",
+            "permissionSource": "No registration or hot-reload operation is exposed; enabling it requires a separate opt-in and qualification decision.",
+            "evidenceSource": "docs/release/UPSTREAM_CAPABILITY_INVENTORY.md — Dynamic tools"
+          },
+          "qualification": {
+            "kind": "operation",
+            "operationId": "dynamic_tool_registration"
+          }
+        }
+      ]
+    }
+  ]
+}

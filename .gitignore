@@ -1,0 +1,39 @@
+# Generated and downloaded reference material. The checked-in manifest and
+# index are the durable record; the cache is reproducible and intentionally
+# not a source dependency.
+/reference/cache/
+
+# Private startup briefs retain personal/global instruction excerpts.
+/NEOBABYLON_STARTUP.md
+/docs/history/NEOBABYLON_STARTUP.md
+
+# Local Codex/application state and generated artifacts.
+/.local/
+/artifacts/
+/data/
+/generated-tools/
+/runtime/data/
+/runtime/target/
+
+# JavaScript/Rust/desktop build output.
+node_modules/
+dist/
+build/
+out/
+target/
+**/bin/
+**/obj/
+*.tsbuildinfo
+
+# Local settings and credentials.
+.env
+.env.*
+!.env.example
+*.local.*
+*.secrets.*
+
+# Editor and operating-system noise.
+.idea/
+.vscode/settings.json
+Thumbs.db
+Desktop.ini

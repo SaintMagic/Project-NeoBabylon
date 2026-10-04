@@ -1,0 +1,22 @@
+{
+  "profileId": "p5-04-wpf-loopback-v1",
+  "mode": "deterministic-loopback-approvalqa",
+  "targetDurationMs": 180000,
+  "maximumElapsedMs": 300000,
+  "stepCadenceMs": 12000,
+  "sampleIntervalMs": 5000,
+  "steps": [
+    { "kind": "complete", "id": 1 },
+    { "kind": "complete", "id": 2 },
+    { "kind": "history", "id": 2 },
+    { "kind": "complete", "id": 3 },
+    { "kind": "cancel", "id": 4 },
+    { "kind": "complete", "id": 5 },
+    { "kind": "diagnostics" },
+    { "kind": "restart" },
+    { "kind": "complete", "id": 6 },
+    { "kind": "history", "id": 6 },
+    { "kind": "cancel", "id": 7 },
+    { "kind": "complete", "id": 8 }
+  ]
+}
