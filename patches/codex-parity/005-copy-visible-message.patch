@@ -1,0 +1,135 @@
+diff --git a/tests/qa/product-parity-ui-checks.mjs b/tests/qa/product-parity-ui-checks.mjs
+index 142375a..94b7303 100644
+--- a/tests/qa/product-parity-ui-checks.mjs
++++ b/tests/qa/product-parity-ui-checks.mjs
+@@ -3,6 +3,24 @@ import assert from "node:assert/strict";
+ // Called only by the synthetic browser fixture, never against a user's desktop.
+ export async function verifyProductParityUi(page, runRoot) {
+   const { default: path } = await import("node:path");
++  await page.evaluate(() => {
++    window.__parityCopies = [];
++    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
++      writeText: async (text) => { window.__parityCopies.push(text); },
++    } });
++  });
++  const message = page.locator(".message").first();
++  const visible = await message.locator(".message-text").textContent();
++  await message.getByRole("button", { name: "Copy message", exact: true }).click();
++  await message.getByRole("status").filter({ hasText: "Copied" }).waitFor();
++  assert.deepEqual(await page.evaluate(() => window.__parityCopies), [visible]);
++  await page.evaluate(() => {
++    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
++      writeText: async () => { throw new Error("synthetic clipboard denial"); },
++    } });
++  });
++  await message.getByRole("button", { name: "Copy message", exact: true }).click();
++  await message.getByRole("alert").filter({ hasText: "Could not copy" }).waitFor();
+   await page.setViewportSize({ width: 2560, height: 1440 });
+   const transcript = page.locator(".transcript");
+   const readable = await transcript.evaluate((element) => element.getBoundingClientRect().width);
+diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
+index 10759ad..3d29ffb 100644
+--- a/ui/diagnostic/src/App.tsx
++++ b/ui/diagnostic/src/App.tsx
+@@ -1,5 +1,6 @@
+ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+ import { readConversationLayout, saveConversationLayout } from "./conversation-layout.mjs";
++import { MessageActions } from "./MessageActions";
+ import { Button } from "@astryxdesign/core/Button";
+ import { IconButton } from "@astryxdesign/core/IconButton";
+ import { listenToHost, requestHost, type HostNotification, type HostOperation } from "./bridge";
+@@ -1798,7 +1799,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+           {savedOutputsTruncated && <div className="history-note" role="note">Showing the 64 newest saved tool outputs. Older output history remains in Codex App Server.</div>}
+           {activitiesTruncated && <div className="history-note" role="note">Older activity cards or text are omitted from this local preview to keep long sessions responsive. Saved tool output may still be available in task history.</div>}
+           <div className={`conversation-scroll ${messages.length ? "has-messages" : ""}`}>
+-          {messages.length === 0 ? <div className="welcome-wrap"><div className="welcome-mark"><Icon name="spark" size={28} /></div><div className="eyebrow"><span className="eyebrow-line" />A THOUGHTFUL WAY TO BUILD<span className="eyebrow-line" /></div><h1>What are we<br /><span>working on today?</span></h1><p className="welcome-copy">A calm, capable workspace for the ideas you want to bring to life.</p><div className="welcome-context"><div className="context-icon"><Icon name="folder" size={15} /></div><div><span>Working in</span><strong>{shortPath(selectedWorkspace)}</strong></div><span className="context-separator" /><div className="context-ready"><span />App data isolated</div></div></div> : <div className="transcript"><div className="conversation-date"><span />TODAY<span /></div>{messages.map((message) => message.role === "status" ? <div className={message.transcriptWindowOmission ? "history-note" : "turn-status-line"} role={message.transcriptWindowOmission ? "note" : "status"} key={message.id}>{!message.transcriptWindowOmission && <Icon name="alert" size={14} />}<span>{message.text}</span></div> : <article className={`message message-${message.role} ${message.failed ? "message-failed" : ""}`} key={message.id}><div className={`message-avatar ${message.role === "assistant" ? "assistant-avatar" : "user-avatar"}`}>{message.role === "assistant" ? <Icon name="spark" size={15} /> : "M"}</div><div className="message-body"><div className="message-meta"><strong>{message.role === "assistant" ? "NeoBabylon" : "You"}</strong>{message.streaming && <span className="typing-indicator"><i /><i /><i /> working</span>}</div><div className="message-text">{message.text}{message.streaming && <span className="stream-cursor" />}</div>{(message.displayTruncated || message.upstreamTruncated) && <div className="output-truncation-note" role="note"><span>{message.displayTruncated ? `Showing a bounded preview; ${message.omittedCharacters ?? "some"} characters are omitted.` : "App Server indicates that source output was already truncated."}</span>{message.sourceRetained && message.threadId && message.turnId ? <button type="button" onClick={() => inspectOutput({ threadId: message.threadId!, turnId: message.turnId!, itemId: message.id, itemType: "agentMessage", title: "Assistant response" })}>Inspect saved output</button> : <span>The partial output was not saved by App Server and cannot be restored.</span>}{message.upstreamTruncated && <span>App Server reports an upstream omission; source bytes omitted before persistence are unavailable.</span>}</div>}</div></article>)}{activities.length > 0 && <div className="activity-stack" aria-label="Agent activity">{activities.map((activity) => <ActivityCard activity={activity} key={activity.id} onInspect={inspectOutput} />)}</div>}{turnReview && turnReview.status !== "awaiting" && turnReview.threadId === threadId && <div className="review-activity"><span><Icon name="folder" size={15} /> App Server tracked changes</span><button type="button" onClick={(event) => { reviewOpenerRef.current = event.currentTarget; setReviewOpen(true); }}>Review changes</button></div>}{approvalRequests.length > 0 && <div className="approval-stack" role="region" aria-label="Pending App Server approvals" aria-live="polite">{approvalRequests.map((request) => <ApprovalCard key={request.requestId} request={request} isResolving={resolvingApprovalId !== null} error={approvalError?.requestId === request.requestId ? approvalError.message : undefined} onDecision={(decision) => void respondToApproval(request, decision)} />)}</div>}{turnState === "running" && !messages.some((message) => message.streaming) && approvalRequests.length === 0 && <div className="assistant-thinking"><span className="thinking-mark"><Icon name="spark" size={15} /></span><span className="thinking-dots"><i /><i /><i /></span><span>Thinking through your request</span></div>}{turnError && <div className="turn-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}</div>}
++          {messages.length === 0 ? <div className="welcome-wrap"><div className="welcome-mark"><Icon name="spark" size={28} /></div><div className="eyebrow"><span className="eyebrow-line" />A THOUGHTFUL WAY TO BUILD<span className="eyebrow-line" /></div><h1>What are we<br /><span>working on today?</span></h1><p className="welcome-copy">A calm, capable workspace for the ideas you want to bring to life.</p><div className="welcome-context"><div className="context-icon"><Icon name="folder" size={15} /></div><div><span>Working in</span><strong>{shortPath(selectedWorkspace)}</strong></div><span className="context-separator" /><div className="context-ready"><span />App data isolated</div></div></div> : <div className="transcript"><div className="conversation-date"><span />TODAY<span /></div>{messages.map((message) => message.role === "status" ? <div className={message.transcriptWindowOmission ? "history-note" : "turn-status-line"} role={message.transcriptWindowOmission ? "note" : "status"} key={message.id}>{!message.transcriptWindowOmission && <Icon name="alert" size={14} />}<span>{message.text}</span></div> : <article className={`message message-${message.role} ${message.failed ? "message-failed" : ""}`} key={message.id}><div className={`message-avatar ${message.role === "assistant" ? "assistant-avatar" : "user-avatar"}`}>{message.role === "assistant" ? <Icon name="spark" size={15} /> : "M"}</div><div className="message-body"><div className="message-meta"><strong>{message.role === "assistant" ? "NeoBabylon" : "You"}</strong>{message.streaming && <span className="typing-indicator"><i /><i /><i /> working</span>}<MessageActions text={message.text} truncated={message.displayTruncated || message.upstreamTruncated} streaming={message.streaming} /></div><div className="message-text">{message.text}{message.streaming && <span className="stream-cursor" />}</div>{(message.displayTruncated || message.upstreamTruncated) && <div className="output-truncation-note" role="note"><span>{message.displayTruncated ? `Showing a bounded preview; ${message.omittedCharacters ?? "some"} characters are omitted.` : "App Server indicates that source output was already truncated."}</span>{message.sourceRetained && message.threadId && message.turnId ? <button type="button" onClick={() => inspectOutput({ threadId: message.threadId!, turnId: message.turnId!, itemId: message.id, itemType: "agentMessage", title: "Assistant response" })}>Inspect saved output</button> : <span>The partial output was not saved by App Server and cannot be restored.</span>}{message.upstreamTruncated && <span>App Server reports an upstream omission; source bytes omitted before persistence are unavailable.</span>}</div>}</div></article>)}{activities.length > 0 && <div className="activity-stack" aria-label="Agent activity">{activities.map((activity) => <ActivityCard activity={activity} key={activity.id} onInspect={inspectOutput} />)}</div>}{turnReview && turnReview.status !== "awaiting" && turnReview.threadId === threadId && <div className="review-activity"><span><Icon name="folder" size={15} /> App Server tracked changes</span><button type="button" onClick={(event) => { reviewOpenerRef.current = event.currentTarget; setReviewOpen(true); }}>Review changes</button></div>}{approvalRequests.length > 0 && <div className="approval-stack" role="region" aria-label="Pending App Server approvals" aria-live="polite">{approvalRequests.map((request) => <ApprovalCard key={request.requestId} request={request} isResolving={resolvingApprovalId !== null} error={approvalError?.requestId === request.requestId ? approvalError.message : undefined} onDecision={(decision) => void respondToApproval(request, decision)} />)}</div>}{turnState === "running" && !messages.some((message) => message.streaming) && approvalRequests.length === 0 && <div className="assistant-thinking"><span className="thinking-mark"><Icon name="spark" size={15} /></span><span className="thinking-dots"><i /><i /><i /></span><span>Thinking through your request</span></div>}{turnError && <div className="turn-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}</div>}
+             {turnError && messages.length === 0 && <div className="turn-error empty-state-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}
+             {startupError && <div className="startup-error" role="alert"><Icon name="alert" size={16} /><div><strong>Desktop host not connected</strong><span>{startupError}</span></div></div>}
+           </div>
+diff --git a/ui/diagnostic/src/MessageActions.tsx b/ui/diagnostic/src/MessageActions.tsx
+new file mode 100644
+index 0000000..c235060
+--- /dev/null
++++ b/ui/diagnostic/src/MessageActions.tsx
+@@ -0,0 +1,30 @@
++import { useEffect, useRef, useState } from "react";
++import { Button } from "@astryxdesign/core/Button";
++import { copyVisibleMessageText } from "./message-copy.mjs";
++
++export function MessageActions({ text, truncated, streaming }: { text: string; truncated?: boolean; streaming?: boolean }) {
++  const [state, setState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
++  const generation = useRef(0);
++  useEffect(() => {
++    generation.current++;
++    setState("idle");
++    return () => { generation.current++; };
++  }, [text]);
++  async function copy() {
++    const current = generation.current;
++    setState("copying");
++    try {
++      await copyVisibleMessageText(text);
++      if (generation.current === current) setState("copied");
++    } catch {
++      if (generation.current === current) setState("failed");
++    }
++  }
++  return <span className="message-actions">
++    <Button size="sm" variant="ghost" label={truncated ? "Copy visible preview" : "Copy message"}
++      tooltip={truncated ? "Copies only the displayed text, not omitted source" : "Copy the message text"}
++      isDisabled={!text || streaming || state === "copying"} onClick={() => void copy()} />
++    {state === "copied" && <span role="status">Copied</span>}
++    {state === "failed" && <span role="alert">Could not copy. Select the text and copy it manually.</span>}
++  </span>;
++}
+diff --git a/ui/diagnostic/src/app.css b/ui/diagnostic/src/app.css
+index 5768b0a..b6168b9 100644
+--- a/ui/diagnostic/src/app.css
++++ b/ui/diagnostic/src/app.css
+@@ -701,3 +701,6 @@ button:disabled { cursor: not-allowed; }
+ @media (max-width: 1180px) {
+   .topbar-actions .runtime-pill { display: none; }
+ }
++
++.message-actions { margin-inline-start: auto; display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; font-size: 11px; }
++.message-actions [role="alert"] { max-width: 260px; }
+diff --git a/ui/diagnostic/src/message-copy.d.mts b/ui/diagnostic/src/message-copy.d.mts
+new file mode 100644
+index 0000000..c653fdd
+--- /dev/null
++++ b/ui/diagnostic/src/message-copy.d.mts
+@@ -0,0 +1 @@
++export function copyVisibleMessageText(text: string, clipboard?: Pick<Clipboard, "writeText">): Promise<void>;
+diff --git a/ui/diagnostic/src/message-copy.mjs b/ui/diagnostic/src/message-copy.mjs
+new file mode 100644
+index 0000000..6c468a9
+--- /dev/null
++++ b/ui/diagnostic/src/message-copy.mjs
+@@ -0,0 +1,4 @@
++export async function copyVisibleMessageText(text, clipboard = globalThis.navigator?.clipboard) {
++  if (!clipboard || typeof clipboard.writeText !== "function") throw new Error("Clipboard is unavailable.");
++  await clipboard.writeText(text);
++}
+diff --git a/ui/diagnostic/tests/message-copy.test.mjs b/ui/diagnostic/tests/message-copy.test.mjs
+new file mode 100644
+index 0000000..c2d8dda
+--- /dev/null
++++ b/ui/diagnostic/tests/message-copy.test.mjs
+@@ -0,0 +1,16 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { copyVisibleMessageText } from "../src/message-copy.mjs";
++
++test("copy preserves the exact visible source text, including code and Unicode", async () => {
++  const original = "```js\nconst value = '<script> Žluťoučký 🦊';\n```\n";
++  const copies = [];
++  await copyVisibleMessageText(original, { writeText: async (text) => copies.push(text) });
++  assert.deepEqual(copies, [original]);
++});
++test("missing clipboard is an explicit failure, not a fake success", async () => {
++  await assert.rejects(copyVisibleMessageText("text", {}), /Clipboard is unavailable/);
++});
++test("denied writes remain failures", async () => {
++  await assert.rejects(copyVisibleMessageText("text", { writeText: async () => { throw new Error("denied"); } }), /denied/);
++});

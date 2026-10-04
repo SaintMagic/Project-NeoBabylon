@@ -1,0 +1,33 @@
+diff --git a/tests/qa/ui-accessibility.mjs b/tests/qa/ui-accessibility.mjs
+index 2a7cc5c..1fc4896 100644
+--- a/tests/qa/ui-accessibility.mjs
++++ b/tests/qa/ui-accessibility.mjs
+@@ -345,7 +345,7 @@ try {
+ 
+   const search = page.getByRole("searchbox", { name: "Search loaded conversations" });
+   await search.fill("Saved Beta");
+-  const savedBeta = page.getByRole("button", { name: /Saved Beta accessibility task/ });
++  const savedBeta = page.locator("button.saved-chat").filter({ hasText: "Saved Beta accessibility task" });
+   await savedBeta.focus();
+   await page.keyboard.press("Enter");
+   await page.waitForFunction(() => window.__qaAccessibilityState.requests.some((request) => request.operation === "resumeThread"));
+@@ -377,7 +377,7 @@ try {
+   await composer.fill("Accessibility UI fixture only");
+   await composer.press("Enter");
+   await page.getByRole("alert").filter({ hasText: "ordinary command failed in this UI fixture" }).waitFor();
+-  await page.getByRole("status", { name: "cmd /c ver, failed, Codex App Server" }).waitFor();
++  await page.getByRole("group", { name: "cmd /c ver, failed, Codex App Server" }).waitFor();
+   const approvalRegion = page.getByRole("region", { name: "Command approval" });
+   await approvalRegion.waitFor();
+   await auditContrast("dark-failure-and-approval");
+@@ -418,8 +418,8 @@ try {
+   const unknownStatusComposer = page.getByRole("textbox", { name: "Message NeoBabylon" });
+   await unknownStatusComposer.fill("Unknown activity status fixture only");
+   await unknownStatusComposer.press("Enter");
+-  await page.getByRole("status", { name: "unknown status fixture command, info, Codex App Server" }).waitFor();
+-  assert.equal(await page.getByRole("status", { name: "unknown status fixture command, succeeded, Codex App Server" }).count(), 0,
++  await page.getByRole("group", { name: "unknown status fixture command, info, Codex App Server" }).waitFor();
++  assert.equal(await page.getByRole("group", { name: "unknown status fixture command, succeeded, Codex App Server" }).count(), 0,
+     "an unknown App Server tool status must not be shown as success");
+ 
+   const diagnosticsButton = page.getByRole("button", { name: "Open diagnostics" });

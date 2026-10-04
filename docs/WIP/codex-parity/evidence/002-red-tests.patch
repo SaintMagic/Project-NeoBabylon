@@ -1,0 +1,87 @@
+diff --git a/tests/product-parity/AgentPolicyChecks.cs b/tests/product-parity/AgentPolicyChecks.cs
+new file mode 100644
+index 0000000..6e08129
+--- /dev/null
++++ b/tests/product-parity/AgentPolicyChecks.cs
+@@ -0,0 +1,27 @@
++using NeoBabylon.Core;
++
++internal static class AgentPolicyChecks
++{
++    public static void Run(Action<string, Action> check)
++    {
++        foreach (var file in new[]
++        {
++            "MODEL_CAPABILITY_LMSTUDIO_QWEN3_14B.json",
++            "MODEL_CAPABILITY_OPENROUTER_STEALTH_SPACE_BUNNY_ALPHA.json",
++            "MODEL_CAPABILITY_NVIDIA_GLM_5_3.json"
++        })
++        {
++            var capability = Fixture.Capability(file);
++            var prompt = CodexModelCatalogBuilder.Build(capability)["models"]![0]!["base_instructions"]!.GetValue<string>();
++            check(capability.ProviderId + " default initiative policy", () =>
++            {
++                foreach (var required in new[] { "routine prerequisites", "verify", "personal files", "Microsoft VDI", "malware", "not containment" })
++                    Fixture.Require(prompt.Contains(required, StringComparison.OrdinalIgnoreCase), "Missing policy contract: " + required);
++                Fixture.Require(prompt.Length < 6000, "Default policy unexpectedly became a large tool manual.");
++            });
++            check(capability.ProviderId + " policy preserves exact model", () =>
++                Fixture.Require(CodexModelCatalogBuilder.Build(capability)["models"]![0]!["slug"]!.GetValue<string>() == capability.ModelIdentifier,
++                    "A prompt change must not substitute the selected model."));
++        }
++    }
++}
+diff --git a/tests/product-parity/NeoBabylon.ProductParity.Tests.csproj b/tests/product-parity/NeoBabylon.ProductParity.Tests.csproj
+new file mode 100644
+index 0000000..c16c053
+--- /dev/null
++++ b/tests/product-parity/NeoBabylon.ProductParity.Tests.csproj
+@@ -0,0 +1,12 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <OutputType>Exe</OutputType>
++    <TargetFramework>net10.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
++  </PropertyGroup>
++  <ItemGroup>
++    <ProjectReference Include="../../host/NeoBabylon.Core/NeoBabylon.Core.csproj" />
++  </ItemGroup>
++</Project>
+diff --git a/tests/product-parity/Program.cs b/tests/product-parity/Program.cs
+new file mode 100644
+index 0000000..d71aadc
+--- /dev/null
++++ b/tests/product-parity/Program.cs
+@@ -0,0 +1,30 @@
++using System.Text.Json;
++using NeoBabylon.Core;
++
++// Source-only checks: no WPF, private runtime, provider credentials or live calls.
++var failures = new List<string>();
++var count = 0;
++void Check(string name, Action test)
++{
++    count++;
++    try { test(); Console.WriteLine("PASS " + name); }
++    catch (Exception error) { failures.Add(name); Console.Error.WriteLine("FAIL " + name + ": " + error.Message); }
++}
++
++AgentPolicyChecks.Run(Check);
++Console.WriteLine($"PRODUCT_PARITY_TESTS: {count - failures.Count}/{count} passed");
++return failures.Count == 0 ? 0 : 1;
++
++internal static class Fixture
++{
++    public static void Require(bool condition, string message)
++    {
++        if (!condition) throw new InvalidOperationException(message);
++    }
++
++    public static ModelCapabilityRecord Capability(string fileName) =>
++        JsonSerializer.Deserialize<ModelCapabilityRecord>(
++            File.ReadAllText(Path.Combine("docs", "release", fileName)),
++            new JsonSerializerOptions(JsonSerializerDefaults.Web))
++        ?? throw new InvalidDataException("Capability fixture is empty.");
++}

@@ -1,0 +1,178 @@
+diff --git a/tests/qa/product-parity-ui-checks.mjs b/tests/qa/product-parity-ui-checks.mjs
+new file mode 100644
+index 0000000..142375a
+--- /dev/null
++++ b/tests/qa/product-parity-ui-checks.mjs
+@@ -0,0 +1,28 @@
++import assert from "node:assert/strict";
++
++// Called only by the synthetic browser fixture, never against a user's desktop.
++export async function verifyProductParityUi(page, runRoot) {
++  const { default: path } = await import("node:path");
++  await page.setViewportSize({ width: 2560, height: 1440 });
++  const transcript = page.locator(".transcript");
++  const readable = await transcript.evaluate((element) => element.getBoundingClientRect().width);
++  await page.getByRole("button", { name: "Wide chat", exact: true }).click();
++  const wide = await transcript.evaluate((element) => element.getBoundingClientRect().width);
++  assert.ok(wide > readable + 200, "Wide mode should use appreciably more space on a large display");
++  assert.equal(await page.evaluate(() => localStorage.getItem("neobabylon.conversation-layout:v1")), "wide");
++  for (const width of [2560, 1440, 960]) {
++    await page.setViewportSize({ width, height: 900 });
++    const metrics = await page.evaluate(() => ({
++      overflow: document.documentElement.scrollWidth - innerWidth,
++      transcript: document.querySelector(".transcript").getBoundingClientRect().width,
++      composer: document.querySelector(".composer-area").getBoundingClientRect().width,
++    }));
++    assert.ok(metrics.overflow <= 1, `Page overflow at ${width}px: ${JSON.stringify(metrics)}`);
++    assert.ok(Math.abs(metrics.transcript - metrics.composer) <= 1, "Wide composer and transcript should align");
++    await page.screenshot({ path: path.join(runRoot, `parity-wide-${width}.png`), fullPage: true });
++  }
++  await page.reload({ waitUntil: "networkidle" });
++  assert.equal(await page.locator(".app-shell").getAttribute("data-conversation-layout"), "wide", "Layout should survive reload");
++  await page.getByRole("button", { name: "Readable chat", exact: true }).click();
++  assert.equal(await page.locator(".app-shell").getAttribute("data-conversation-layout"), "readable");
++}
+diff --git a/tests/qa/ui-accessibility.mjs b/tests/qa/ui-accessibility.mjs
+index f0edb50..2a7cc5c 100644
+--- a/tests/qa/ui-accessibility.mjs
++++ b/tests/qa/ui-accessibility.mjs
+@@ -478,6 +478,10 @@ try {
+   assert.ok(await page.getByRole("status").filter({ hasText: "Turn interrupted" }).count() > 0,
+     "the deterministic stop path should show an attributed interrupted status");
+ 
++  if (process.argv.includes("--product-parity")) {
++    const { verifyProductParityUi } = await import("./product-parity-ui-checks.mjs");
++    await verifyProductParityUi(page, runRoot);
++  }
+   assert.deepEqual(consoleErrors, [], "browser console should stay error-free");
+   assert.deepEqual(externalRequests, [], "the deterministic UI qualification must not contact a provider or external site");
+   const requestSummary = await page.evaluate(() => window.__qaAccessibilityState.requests.map((request) => ({
+diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
+index 0908a0f..10759ad 100644
+--- a/ui/diagnostic/src/App.tsx
++++ b/ui/diagnostic/src/App.tsx
+@@ -1,4 +1,5 @@
+ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
++import { readConversationLayout, saveConversationLayout } from "./conversation-layout.mjs";
+ import { Button } from "@astryxdesign/core/Button";
+ import { IconButton } from "@astryxdesign/core/IconButton";
+ import { listenToHost, requestHost, type HostNotification, type HostOperation } from "./bridge";
+@@ -182,6 +183,13 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
+ }
+ 
+ export default function App({ appearance, onAppearanceChange }: { appearance: Appearance; onAppearanceChange: (appearance: Appearance) => void }) {
++  const [conversationLayout, setConversationLayout] = useState(readConversationLayout);
++  const [layoutStorageFailed, setLayoutStorageFailed] = useState(false);
++  function toggleConversationLayout() {
++    const next = conversationLayout === "readable" ? "wide" : "readable";
++    setConversationLayout(next);
++    setLayoutStorageFailed(!saveConversationLayout(next));
++  }
+   const [runtime, setRuntime] = useState<JsonRecord | null>(null);
+   const [capability, setCapability] = useState<JsonRecord | null>(null);
+   const [capabilities, setCapabilities] = useState<CapabilityEntry[]>([]);
+@@ -1682,7 +1690,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+     resultCount: visibleThreads.length,
+   });
+ 
+-  return <CommandStopActionContext.Provider value={stopCommand}><div className="app-shell">
++  return <CommandStopActionContext.Provider value={stopCommand}><div className="app-shell" data-conversation-layout={conversationLayout}>
+     <aside className="sidebar" aria-label="Workspace navigation" inert={diagnosticsOpen || unapprovedToolsOpen || reviewOpen || Boolean(outputInspection)}>
+       <div className="brand-lockup"><img className="brand-symbol" src="/favicon.svg" alt="" aria-hidden="true" /><div className="brand-copy"><strong>neobabylon</strong><span>DESKTOP AGENT WORKSPACE</span></div><IconButton className="icon-button sidebar-search" label="Search conversations" tooltip="Search conversations" variant="ghost" icon={<Icon name="search" />} onClick={() => threadSearchRef.current?.focus()} /></div>
+       <Button className="new-task-button" label={creatingNewTask ? "Saving task…" : "New task"} variant="secondary" icon={<Icon name="plus" size={17} />} onClick={() => void startNewTask()} isDisabled={isBusy} tooltip={threadId ? "Close this view and preserve the saved App Server task" : "Start a task"} />
+@@ -1764,6 +1772,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+       <header className="topbar">
+         <div className="breadcrumb"><span>Projects</span><Icon name="chevronRight" size={14} /><strong>{selectedProjectName}</strong><Icon name="chevronRight" size={14} /><span className="breadcrumb-current">{threadTitle}</span></div>
+         <div className="topbar-actions">
++          <Button className="conversation-width-toggle" size="sm" variant="ghost" label={conversationLayout === "readable" ? "Wide chat" : "Readable chat"} tooltip={conversationLayout === "readable" ? "Use available conversation width" : "Limit conversation line length"} onClick={toggleConversationLayout} />
+           <span className="runtime-pill"><span className="runtime-pill-dot" />Pinned App Server {appServerVersion}</span>
+           <IconButton className="icon-button appearance-toggle" label={`Switch to ${appearance === "dark" ? "light" : "dark"} mode`} tooltip={`Switch to ${appearance === "dark" ? "light" : "dark"} mode`} variant="ghost" icon={<Icon name={appearance === "dark" ? "sun" : "moon"} size={17} />} onClick={toggleAppearance} />
+           {threadId && <IconButton className="icon-button" label="Fork conversation" tooltip="Create a new task branch; keep the original" variant="ghost" icon={<Icon name="fork" size={17} />} onClick={() => void forkCurrentThread()} isDisabled={isBusy || threadReadOnly} />}
+@@ -1784,6 +1793,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+               <button type="button" disabled={refreshingRecordRecovery} onClick={() => void refreshProtectedRecordRecoveryStatus().then(setRecordRecoveryRefreshMessage)}>{refreshingRecordRecovery ? "Refreshing host status…" : "Refresh host status"}</button>
+             </div>
+           </section>}
++          {layoutStorageFailed && <div className="history-note" role="status">Conversation width changed for this session only; the preference could not be saved.</div>}
+           {historyTruncated && <div className="history-note" role="note">Some earlier or longer messages are omitted from this preview. Full history remains in Codex App Server.</div>}
+           {savedOutputsTruncated && <div className="history-note" role="note">Showing the 64 newest saved tool outputs. Older output history remains in Codex App Server.</div>}
+           {activitiesTruncated && <div className="history-note" role="note">Older activity cards or text are omitted from this local preview to keep long sessions responsive. Saved tool output may still be available in task history.</div>}
+diff --git a/ui/diagnostic/src/app.css b/ui/diagnostic/src/app.css
+index 8f4f766..5768b0a 100644
+--- a/ui/diagnostic/src/app.css
++++ b/ui/diagnostic/src/app.css
+@@ -690,3 +690,14 @@ button:disabled { cursor: not-allowed; }
+ :root[data-appearance="dark"] .approval-primary:hover:not(:disabled),
+ :root[data-appearance="dark"] .drawer-done:hover { color: #fff; background: #555; }
+ :root[data-appearance="dark"] .stop-button { color: #fff; }
++
++/* Opt-in layout preference. Readable keeps the existing narrow default. */
++.app-shell[data-conversation-layout="wide"] .transcript,
++.app-shell[data-conversation-layout="wide"] .composer-area {
++  width: calc(100% - clamp(32px, 4vw, 80px));
++  max-width: none;
++}
++.conversation-width-toggle { flex-shrink: 0; }
++@media (max-width: 1180px) {
++  .topbar-actions .runtime-pill { display: none; }
++}
+diff --git a/ui/diagnostic/src/conversation-layout.d.mts b/ui/diagnostic/src/conversation-layout.d.mts
+new file mode 100644
+index 0000000..528574d
+--- /dev/null
++++ b/ui/diagnostic/src/conversation-layout.d.mts
+@@ -0,0 +1,4 @@
++export type ConversationLayout = "readable" | "wide";
++export const CONVERSATION_LAYOUT_KEY: string;
++export function readConversationLayout(storage?: Pick<Storage, "getItem">): ConversationLayout;
++export function saveConversationLayout(mode: ConversationLayout, storage?: Pick<Storage, "setItem">): boolean;
+diff --git a/ui/diagnostic/src/conversation-layout.mjs b/ui/diagnostic/src/conversation-layout.mjs
+new file mode 100644
+index 0000000..54ce489
+--- /dev/null
++++ b/ui/diagnostic/src/conversation-layout.mjs
+@@ -0,0 +1,19 @@
++export const CONVERSATION_LAYOUT_KEY = "neobabylon.conversation-layout:v1";
++const valid = (mode) => mode === "readable" || mode === "wide";
++
++export function readConversationLayout(storage) {
++  try {
++    const saved = (storage ?? globalThis.localStorage)?.getItem(CONVERSATION_LAYOUT_KEY);
++    return valid(saved) ? saved : "readable";
++  } catch { return "readable"; }
++}
++
++export function saveConversationLayout(mode, storage) {
++  if (!valid(mode)) return false;
++  try {
++    const target = storage ?? globalThis.localStorage;
++    if (!target) return false;
++    target.setItem(CONVERSATION_LAYOUT_KEY, mode);
++    return true;
++  } catch { return false; }
++}
+diff --git a/ui/diagnostic/tests/conversation-layout.test.mjs b/ui/diagnostic/tests/conversation-layout.test.mjs
+new file mode 100644
+index 0000000..3d9d431
+--- /dev/null
++++ b/ui/diagnostic/tests/conversation-layout.test.mjs
+@@ -0,0 +1,20 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readConversationLayout, saveConversationLayout, CONVERSATION_LAYOUT_KEY } from "../src/conversation-layout.mjs";
++
++test("readable is the default; only known persisted modes are accepted", () => {
++  for (const saved of [null, "invalid", "true", ""]) assert.equal(readConversationLayout({ getItem: () => saved }), "readable");
++  assert.equal(readConversationLayout({ getItem: () => "wide" }), "wide");
++});
++test("storage exceptions degrade to readable without breaking startup", () => {
++  assert.equal(readConversationLayout({ getItem: () => { throw new Error("denied"); } }), "readable");
++});
++test("saving reports success, rejection and persistence failure truthfully", () => {
++  const calls = [];
++  const storage = { setItem: (...args) => calls.push(args) };
++  assert.equal(saveConversationLayout("wide", storage), true);
++  assert.deepEqual(calls, [[CONVERSATION_LAYOUT_KEY, "wide"]]);
++  assert.equal(saveConversationLayout("arbitrary", storage), false);
++  assert.equal(calls.length, 1);
++  assert.equal(saveConversationLayout("readable", { setItem: () => { throw new Error("quota"); } }), false);
++});

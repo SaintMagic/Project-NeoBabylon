@@ -1,0 +1,332 @@
+diff --git a/host/NeoBabylon.Core/AppServerNotificationProjection.cs b/host/NeoBabylon.Core/AppServerNotificationProjection.cs
+index f0f035c..0c834a1 100644
+--- a/host/NeoBabylon.Core/AppServerNotificationProjection.cs
++++ b/host/NeoBabylon.Core/AppServerNotificationProjection.cs
+@@ -27,7 +27,7 @@ public sealed class AppServerNotificationProjection
+     private static readonly HashSet<string> ToolCompletedItemFields =
+     [
+         "id", "type", "status", "command", "tool", "aggregatedOutput", "output", "result", "error",
+-        "exitCode", "durationMs", "callId"
++        "exitCode", "durationMs", "callId", "contentItems", "success"
+     ];
+ 
+     private static readonly Regex UpstreamOmissionMarker = new(
+@@ -190,7 +190,7 @@ public sealed class AppServerNotificationProjection
+                 ? AssistantDisplayLimit
+                 : itemType != "agentMessage" && itemType != "contextCompaction" ? property.Key switch
+                 {
+-                    "aggregatedOutput" or "output" or "result" => ToolOutputDisplayLimit,
++                    "aggregatedOutput" or "output" or "result" or "contentItems" => ToolOutputDisplayLimit,
+                     "error" => 8_000,
+                     "command" => 4_000,
+                     "tool" => 2_000,
+@@ -198,7 +198,7 @@ public sealed class AppServerNotificationProjection
+                 }
+                 : 0;
+ 
+-            if (limit > 0 && StringValue(property.Value) is { } text)
++            if (limit > 0 && ToolOutputText.Text(property.Value) is { } text)
+             {
+                 var displayedLength = Math.Min(text.Length, limit);
+                 item[property.Key] = text[..displayedLength];
+@@ -217,6 +217,16 @@ public sealed class AppServerNotificationProjection
+             }
+         }
+ 
++        if (ToolItemTypes.Contains(itemType))
++        {
++            var originalOutput = ToolOutputText.Read(sourceItem);
++            var displayedOutput = ToolOutputText.Read(item);
++            displayMetadata = originalOutput is not null
++                && (originalOutput.Length > (displayedOutput?.Length ?? 0) || UpstreamOmissionMarker.IsMatch(originalOutput))
++                ? DisplayMetadata(originalOutput.Length, Math.Max(0, originalOutput.Length - (displayedOutput?.Length ?? 0)), true, UpstreamOmissionMarker.IsMatch(originalOutput))
++                : null;
++        }
++
+         if (displayMetadata is not null)
+         {
+             item["neoBabylonDisplay"] = displayMetadata;
+diff --git a/host/NeoBabylon.Core/ThreadItemOutputRangeProjector.cs b/host/NeoBabylon.Core/ThreadItemOutputRangeProjector.cs
+index 103b630..ef56da7 100644
+--- a/host/NeoBabylon.Core/ThreadItemOutputRangeProjector.cs
++++ b/host/NeoBabylon.Core/ThreadItemOutputRangeProjector.cs
+@@ -115,9 +115,7 @@ public static class ThreadItemOutputRangeProjector
+ 
+         if (itemType is "commandExecution" or "fileChange" or "mcpToolCall" or "dynamicToolCall" or "functionCallOutput")
+         {
+-            return StringValue(item["aggregatedOutput"])
+-                ?? StringValue(item["output"])
+-                ?? StringValue(item["result"]);
++            return ToolOutputText.Read(item);
+         }
+ 
+         return null;
+diff --git a/host/NeoBabylon.Core/ThreadSavedOutputProjector.cs b/host/NeoBabylon.Core/ThreadSavedOutputProjector.cs
+index 5dabe04..95f8c3d 100644
+--- a/host/NeoBabylon.Core/ThreadSavedOutputProjector.cs
++++ b/host/NeoBabylon.Core/ThreadSavedOutputProjector.cs
+@@ -51,7 +51,7 @@ public static class ThreadSavedOutputProjector
+                     break;
+                 }
+ 
+-                var outputText = FirstString(item, "error", "aggregatedOutput", "output", "result");
++                var outputText = ToolOutputText.Read(item);
+                 var displayedLength = Math.Min(outputText?.Length ?? 0,
+                     Math.Min(AppServerNotificationProjection.ToolOutputDisplayLimit, remaining));
+                 var omittedCharacters = (outputText?.Length ?? 0) - displayedLength;
+@@ -60,7 +60,7 @@ public static class ThreadSavedOutputProjector
+                 var itemId = StringValue(item["id"]);
+                 var rawStatus = StringValue(item["status"]);
+                 var succeeded = string.Equals(rawStatus, "completed", StringComparison.OrdinalIgnoreCase)
+-                    && item["error"] is null;
++                    && !ToolOutputText.Failed(item);
+ 
+                 var projected = new JsonObject
+                 {
+@@ -68,11 +68,13 @@ public static class ThreadSavedOutputProjector
+                     ["turnId"] = turnId,
+                     ["itemType"] = itemType,
+                     ["status"] = rawStatus,
+-                    ["outcome"] = string.Equals(rawStatus, "failed", StringComparison.OrdinalIgnoreCase)
++                    ["outcome"] = ToolOutputText.Failed(item)
+                         ? "failed"
+                         : succeeded ? "succeeded" : "unknown",
+                     ["title"] = Clip(FirstString(item, "command", "tool") ?? itemType, MaximumTitleCharacters),
+-                    ["text"] = displayText
++                    ["text"] = displayText,
++                    ["exitCode"] = item["exitCode"]?.DeepClone(),
++                    ["durationMs"] = item["durationMs"]?.DeepClone()
+                 };
+                 if (omittedCharacters > 0)
+                 {
+diff --git a/host/NeoBabylon.Core/ToolOutputText.cs b/host/NeoBabylon.Core/ToolOutputText.cs
+new file mode 100644
+index 0000000..d5a0032
+--- /dev/null
++++ b/host/NeoBabylon.Core/ToolOutputText.cs
+@@ -0,0 +1,31 @@
++using System.Text.Json.Nodes;
++
++namespace NeoBabylon.Core;
++
++/// <summary>Display-only serialization. Never changes provider input or the source journal.</summary>
++public static class ToolOutputText
++{
++    public static string? Text(JsonNode? node) => node switch
++    {
++        null => null,
++        JsonValue value when value.TryGetValue<string>(out var text) => text,
++        _ => node.ToJsonString()
++    };
++
++    public static string? Read(JsonObject item)
++    {
++        foreach (var name in new[] { "error", "aggregatedOutput", "output", "result", "contentItems" })
++        {
++            var text = Text(item[name]);
++            if (!string.IsNullOrWhiteSpace(text)) return text;
++        }
++        return null;
++    }
++
++    public static bool Failed(JsonObject item) =>
++        !string.IsNullOrWhiteSpace(Text(item["error"]))
++        || item["success"] is JsonValue success && success.TryGetValue<bool>(out var succeeded) && !succeeded
++        || item["exitCode"] is JsonValue exit && exit.TryGetValue<int>(out var code) && code != 0
++        || item["status"] is JsonValue status && status.TryGetValue<string>(out var text)
++            && string.Equals(text, "failed", StringComparison.OrdinalIgnoreCase);
++}
+diff --git a/host/NeoBabylon.Core/TurnDiagnostics.cs b/host/NeoBabylon.Core/TurnDiagnostics.cs
+index 238b7b0..c08e214 100644
+--- a/host/NeoBabylon.Core/TurnDiagnostics.cs
++++ b/host/NeoBabylon.Core/TurnDiagnostics.cs
+@@ -32,12 +32,12 @@ public static class TurnDiagnostics
+             }
+ 
+             var status = StringValue(item["status"]);
+-            var output = FirstString(item, "aggregatedOutput", "output", "result");
+-            var error = StringValue(item["error"]);
++            var output = ToolOutputText.Read(item);
++            var error = ToolOutputText.Text(item["error"]);
+             var exitCode = IntValue(item["exitCode"]);
+             var succeeded = string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+                 && exitCode is null or 0
+-                && string.IsNullOrWhiteSpace(error);
++                && !ToolOutputText.Failed(item);
+             var summary = new JsonObject
+             {
+                 ["eventType"] = "toolOutcome",
+@@ -57,7 +57,7 @@ public static class TurnDiagnostics
+             }
+ 
+             CopyString(summary, "command", item, "command");
+-            CopyString(summary, "output", item, "aggregatedOutput", "output", "result");
++            summary["output"] = output;
+             if (exitCode is not null)
+             {
+                 summary["exitCode"] = exitCode.Value;
+diff --git a/tests/product-parity/Program.cs b/tests/product-parity/Program.cs
+index d71aadc..e291fe5 100644
+--- a/tests/product-parity/Program.cs
++++ b/tests/product-parity/Program.cs
+@@ -12,6 +12,7 @@ void Check(string name, Action test)
+ }
+ 
+ AgentPolicyChecks.Run(Check);
++ToolOutputChecks.Run(Check);
+ Console.WriteLine($"PRODUCT_PARITY_TESTS: {count - failures.Count}/{count} passed");
+ return failures.Count == 0 ? 0 : 1;
+ 
+diff --git a/tests/product-parity/ToolOutputChecks.cs b/tests/product-parity/ToolOutputChecks.cs
+new file mode 100644
+index 0000000..3da0a21
+--- /dev/null
++++ b/tests/product-parity/ToolOutputChecks.cs
+@@ -0,0 +1,61 @@
++using System.Text.Json.Nodes;
++using NeoBabylon.Core;
++
++internal static class ToolOutputChecks
++{
++    public static void Run(Action<string, Action> check)
++    {
++        check("structured result survives saved projection and paging", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"mcpToolCall","status":"completed","result":{"content":[{"type":"text","text":"answer"}]}}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>() == item["result"]!.ToJsonString(), "Structured result lost.");
++            Fixture.Require(Page(item).Text == saved["text"]?.GetValue<string>(), "Saved and paged representation disagree.");
++        });
++        check("structured failure is visible and remains failed after reload", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"mcpToolCall","status":"completed","error":{"message":"permission denied"}}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Structured failure misclassified.");
++            Fixture.Require(Page(item).Text.Contains("permission denied"), "Error-only item is not inspectable.");
++            var projected = Project(item);
++            Fixture.Require(TurnDiagnostics.HasFailure(TurnDiagnostics.Extract([projected])), "Live structured error reported successful.");
++        });
++        check("large structured results cannot bypass display bound", () =>
++        {
++            var result = new JsonObject { ["text"] = new string('x', 100_000) };
++            var item = new JsonObject { ["id"] = "i", ["type"] = "mcpToolCall", ["status"] = "completed", ["result"] = result };
++            var original = item.ToJsonString();
++            var projected = Project(item).Params["item"]!.AsObject();
++            Fixture.Require(projected["result"] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length <= AppServerNotificationProjection.ToolOutputDisplayLimit, "Structured result bypassed bound.");
++            Fixture.Require(projected["neoBabylonDisplay"]?["displayTruncated"]?.GetValue<bool>() == true, "Omission not disclosed.");
++            Fixture.Require(item.ToJsonString() == original, "Source journal item was mutated.");
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>()?.Length == AppServerNotificationProjection.ToolOutputDisplayLimit, "Saved preview bound differs.");
++            Fixture.Require(Page(item, 40_000).Text.Length > 0, "Omitted source is not pageable.");
++        });
++        check("dynamic content and explicit unsuccessful result survive projection", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"dynamicToolCall","status":"completed","success":false,"contentItems":[{"type":"inputText","text":"failed validation"}]}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>()?.Contains("failed validation") == true, "Dynamic content lost.");
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Explicit unsuccessful result ignored.");
++            Fixture.Require(TurnDiagnostics.HasFailure(TurnDiagnostics.Extract([Project(item)])), "Live unsuccessful result ignored.");
++        });
++        check("saved command preserves exit code and duration", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"commandExecution","status":"completed","error":"","aggregatedOutput":"output","exitCode":7,"durationMs":123}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>() == "output", "Empty error shadows real output.");
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Nonzero exit misclassified.");
++            Fixture.Require(saved["exitCode"]?.GetValue<int>() == 7 && saved["durationMs"]?.GetValue<int>() == 123, "Execution metadata lost.");
++        });
++    }
++
++    private static JsonObject Saved(JsonObject item) => ThreadSavedOutputProjector.Project(
++        new JsonArray(new JsonObject { ["id"] = "t", ["items"] = new JsonArray(item.DeepClone()) })).Outputs[0]!.AsObject();
++    private static AppServerNotification Project(JsonObject item) => new AppServerNotificationProjection().Project(
++        new AppServerNotification("item/completed", new JsonObject { ["threadId"] = "thread", ["turnId"] = "t", ["item"] = item.DeepClone() }))!;
++    private static ThreadItemOutputRange Page(JsonObject item, int offset = 0) => ThreadItemOutputRangeProjector.Project(
++        new JsonObject { ["data"] = new JsonArray(new JsonObject { ["turnId"] = "t", ["item"] = item.DeepClone() }) }, "thread", "t", "i", offset, 32_768);
++}
+diff --git a/ui/diagnostic/src/App.tsx b/ui/diagnostic/src/App.tsx
+index c24f9d1..0908a0f 100644
+--- a/ui/diagnostic/src/App.tsx
++++ b/ui/diagnostic/src/App.tsx
+@@ -1233,6 +1233,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+             detail: textValue(field(item, "output")) ?? textValue(field(recordValue(field(item, "failure")), "message")),
+             status: field(item, "succeeded") === true ? "succeeded" : field(item, "succeeded") === false ? "failed" : "info",
+             ...(exitCode === undefined ? {} : { exitCode }),
++          ...(durationMs === undefined ? {} : { durationMs }),
+             ...(recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined),
+             itemType: textValue(field(item, "itemType")),
+             threadId: textValue(field(result, "threadId")) ?? threadId ?? undefined,
+@@ -1590,13 +1591,18 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
+         const rawExitCode = field(item, "exitCode");
+         const exitCode = typeof rawExitCode === "number" && Number.isSafeInteger(rawExitCode) ? rawExitCode : undefined;
+         const failure = textValue(rawFailure);
++        const rawDuration = field(item, "durationMs");
++        const durationMs = typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : undefined;
++        const reportedFailure = failure || (rawFailure != null && typeof rawFailure !== "string")
++          || (exitCode !== undefined && exitCode !== 0) || field(item, "success") === false;
+         const displayMetadata = recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined;
+         addActivity({
+           id: itemId,
+-          title: textValue(field(item, "command")) ?? itemType ?? "Tool activity",
+-          detail: failure ?? textValue(field(item, "aggregatedOutput")) ?? textValue(field(item, "output")),
+-          status: classifyActivityOutcome(status, rawFailure),
++          title: textValue(field(item, "command")) ?? textValue(field(item, "tool")) ?? itemType ?? "Tool activity",
++          detail: failure ?? textValue(field(item, "aggregatedOutput")) ?? textValue(field(item, "output")) ?? textValue(field(item, "result")) ?? textValue(field(item, "contentItems")),
++          status: classifyActivityOutcome(status, reportedFailure ? rawFailure || "Tool reported failure" : undefined),
+           ...(exitCode === undefined ? {} : { exitCode }),
++          ...(durationMs === undefined ? {} : { durationMs }),
+           ...displayMetadata,
+           itemType,
+           threadId: textValue(field(params, "threadId")) ?? threadId ?? undefined,
+@@ -1975,6 +1981,7 @@ function ActivityCard({ activity, onInspect }: { activity: ActivityEntry; onInsp
+     <div className="activity-status-group">
+       <span className="activity-status-label" role="status">{stateLabel}</span>
+       {exitCode !== undefined && <span className="activity-exit-code">Exit code {exitCode}</span>}
++      {activity.durationMs !== undefined && <span className="activity-exit-code">{(activity.durationMs / 1000).toFixed(2)} s</span>}
+       {mayStopCommand(activity) && stopCommandAction && <button
+         type="button"
+         className="activity-command-stop"
+diff --git a/ui/diagnostic/src/activity-history.d.mts b/ui/diagnostic/src/activity-history.d.mts
+index 9a15576..27eb612 100644
+--- a/ui/diagnostic/src/activity-history.d.mts
++++ b/ui/diagnostic/src/activity-history.d.mts
+@@ -3,6 +3,7 @@ export type ActivityHistoryEntry = {
+   title: string;
+   detail?: string;
+   exitCode?: number;
++  durationMs?: number;
+   status: "running" | "succeeded" | "failed" | "info";
+   displayTruncated?: boolean;
+   omittedCharacters?: number;
+diff --git a/ui/diagnostic/src/restoration.mjs b/ui/diagnostic/src/restoration.mjs
+index 83aa021..8c50d1c 100644
+--- a/ui/diagnostic/src/restoration.mjs
++++ b/ui/diagnostic/src/restoration.mjs
+@@ -103,6 +103,8 @@ export function restoreSavedActivities(outputs, threadId) {
+       title: textValue(output.title) ?? textValue(output.itemType) ?? "Tool activity",
+       detail: typeof output.text === "string" ? output.text : undefined,
+       status,
++      ...(Number.isSafeInteger(output.exitCode) ? { exitCode: output.exitCode } : {}),
++      ...(Number.isFinite(output.durationMs) && output.durationMs >= 0 ? { durationMs: output.durationMs } : {}),
+       itemType: textValue(output.itemType),
+       turnId: textValue(output.turnId),
+       sourceRetained: true,
+diff --git a/ui/diagnostic/tests/structured-tool-restoration.test.mjs b/ui/diagnostic/tests/structured-tool-restoration.test.mjs
+new file mode 100644
+index 0000000..6c4d37e
+--- /dev/null
++++ b/ui/diagnostic/tests/structured-tool-restoration.test.mjs
+@@ -0,0 +1,13 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { restoreSavedActivities } from "../src/restoration.mjs";
++
++test("restored failed tool preserves structured display text and nonzero exit code", () => {
++  const [activity] = restoreSavedActivities([{ itemId: "i", turnId: "t", itemType: "mcpToolCall", outcome: "failed", text: '{"message":"denied"}', exitCode: 7, durationMs: 123 }], "thread");
++  assert.equal(activity.status, "failed");
++  assert.equal(activity.detail, '{"message":"denied"}');
++  assert.equal(activity.exitCode, 7);
++  assert.equal(activity.durationMs, 123);
++  assert.equal(activity.threadId, "thread");
++  assert.equal(activity.turnId, "t");
++});

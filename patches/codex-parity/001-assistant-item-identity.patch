@@ -1,0 +1,68 @@
+diff --git a/ui/diagnostic/src/transcript.mjs b/ui/diagnostic/src/transcript.mjs
+index 9e14d5d..9461814 100644
+--- a/ui/diagnostic/src/transcript.mjs
++++ b/ui/diagnostic/src/transcript.mjs
+@@ -112,7 +112,19 @@ export function markAssistantTurnFailed(current, userMessageId, turnId, threadId
+ }
+ 
+ export function upsertAssistantMessage(current, text, streaming, failed = false, id, displayMetadata, turnId, threadId) {
+-  const targetId = id ?? current.findLast((message) => message.role === "assistant" && message.streaming)?.id ?? "assistant-current";
++  // A provider item id is authoritative. Text equality is only a fallback for
++  // the host's id-less final summary, and only inside the current user turn.
++  const userIndex = current.findLastIndex((message) => message.role === "user");
++  const sameTurn = (message) => message.role === "assistant"
++    && (!turnId || !message.turnId || message.turnId === turnId)
++    && (!threadId || !message.threadId || message.threadId === threadId);
++  const tail = current.slice(userIndex + 1);
++  const last = tail.at(-1);
++  const fallback = id === undefined
++    ? tail.findLast((message) => sameTurn(message) && message.streaming)
++      ?? (last && sameTurn(last) && last.text.trim() === text.trim() ? last : undefined)
++    : undefined;
++  const targetId = id ?? fallback?.id ?? `assistant-fallback-${crypto.randomUUID()}`;
+   const index = current.findIndex((message) => message.id === targetId && message.role === "assistant");
+   const next = {
+     id: targetId,
+@@ -125,10 +137,5 @@ export function upsertAssistantMessage(current, text, streaming, failed = false,
+   };
+   if (index >= 0) return current.map((message, itemIndex) => itemIndex === index ? next : message);
+ 
+-  const lastIndex = current.length - 1;
+-  const last = current[lastIndex];
+-  if (last?.role === "assistant" && last.text.trim() === text.trim()) {
+-    return current.map((message, itemIndex) => itemIndex === lastIndex ? { ...next, id: last.id } : message);
+-  }
+   return [...current, next];
+ }
+diff --git a/ui/diagnostic/tests/transcript.test.mjs b/ui/diagnostic/tests/transcript.test.mjs
+index 3e3d25b..0a03724 100644
+--- a/ui/diagnostic/tests/transcript.test.mjs
++++ b/ui/diagnostic/tests/transcript.test.mjs
+@@ -110,3 +110,27 @@ test("transcript projection enforces the total text ceiling and carries omission
+   assert.equal(notice.transcriptWindowOmission.omittedEntries, 1);
+   assert.ok(next.reduce((total, message) => total + message.text.length, 0) <= 500_000);
+ });
++
++test("explicit assistant item identities are not merged by equal text", () => {
++  const first = { id: "agent-1", role: "assistant", text: "Done.", turnId: "turn-1" };
++  const next = upsertAssistantMessage([first], "Done.", false, false, "agent-2", undefined, "turn-1");
++  assert.deepEqual(next.map(message => message.id), ["agent-1", "agent-2"]);
++  const repeated = upsertAssistantMessage(next, "Done.", false, false, "agent-2", undefined, "turn-1");
++  assert.equal(repeated.length, 2, "a repeated completion of the same item is idempotent");
++});
++
++test("a fallback completion never overwrites an earlier user turn", () => {
++  const first = upsertAssistantMessage([{ id: "user-1", role: "user", text: "First" }], "Done.", false);
++  const next = upsertAssistantMessage([...first, { id: "user-2", role: "user", text: "Second" }], "Done.", false);
++  assert.equal(next.length, 4);
++  assert.equal(next[1].text, "Done.");
++  assert.notEqual(next[1].id, next[3].id);
++});
++
++test("fallback deduplication respects known thread and turn identity", () => {
++  const first = { id: "agent-1", role: "assistant", text: "Done.", turnId: "turn-1", threadId: "thread-1" };
++  const next = upsertAssistantMessage([first], "Done.", false, false, undefined, undefined, "turn-2", "thread-1");
++  assert.equal(next.length, 2);
++  assert.equal(next[0].turnId, "turn-1");
++  assert.equal(next[1].turnId, "turn-2");
++});

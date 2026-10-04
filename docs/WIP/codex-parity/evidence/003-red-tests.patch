@@ -1,0 +1,79 @@
+diff --git a/tests/product-parity/Program.cs b/tests/product-parity/Program.cs
+index d71aadc..e291fe5 100644
+--- a/tests/product-parity/Program.cs
++++ b/tests/product-parity/Program.cs
+@@ -12,6 +12,7 @@ void Check(string name, Action test)
+ }
+ 
+ AgentPolicyChecks.Run(Check);
++ToolOutputChecks.Run(Check);
+ Console.WriteLine($"PRODUCT_PARITY_TESTS: {count - failures.Count}/{count} passed");
+ return failures.Count == 0 ? 0 : 1;
+ 
+diff --git a/tests/product-parity/ToolOutputChecks.cs b/tests/product-parity/ToolOutputChecks.cs
+new file mode 100644
+index 0000000..3da0a21
+--- /dev/null
++++ b/tests/product-parity/ToolOutputChecks.cs
+@@ -0,0 +1,61 @@
++using System.Text.Json.Nodes;
++using NeoBabylon.Core;
++
++internal static class ToolOutputChecks
++{
++    public static void Run(Action<string, Action> check)
++    {
++        check("structured result survives saved projection and paging", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"mcpToolCall","status":"completed","result":{"content":[{"type":"text","text":"answer"}]}}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>() == item["result"]!.ToJsonString(), "Structured result lost.");
++            Fixture.Require(Page(item).Text == saved["text"]?.GetValue<string>(), "Saved and paged representation disagree.");
++        });
++        check("structured failure is visible and remains failed after reload", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"mcpToolCall","status":"completed","error":{"message":"permission denied"}}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Structured failure misclassified.");
++            Fixture.Require(Page(item).Text.Contains("permission denied"), "Error-only item is not inspectable.");
++            var projected = Project(item);
++            Fixture.Require(TurnDiagnostics.HasFailure(TurnDiagnostics.Extract([projected])), "Live structured error reported successful.");
++        });
++        check("large structured results cannot bypass display bound", () =>
++        {
++            var result = new JsonObject { ["text"] = new string('x', 100_000) };
++            var item = new JsonObject { ["id"] = "i", ["type"] = "mcpToolCall", ["status"] = "completed", ["result"] = result };
++            var original = item.ToJsonString();
++            var projected = Project(item).Params["item"]!.AsObject();
++            Fixture.Require(projected["result"] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length <= AppServerNotificationProjection.ToolOutputDisplayLimit, "Structured result bypassed bound.");
++            Fixture.Require(projected["neoBabylonDisplay"]?["displayTruncated"]?.GetValue<bool>() == true, "Omission not disclosed.");
++            Fixture.Require(item.ToJsonString() == original, "Source journal item was mutated.");
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>()?.Length == AppServerNotificationProjection.ToolOutputDisplayLimit, "Saved preview bound differs.");
++            Fixture.Require(Page(item, 40_000).Text.Length > 0, "Omitted source is not pageable.");
++        });
++        check("dynamic content and explicit unsuccessful result survive projection", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"dynamicToolCall","status":"completed","success":false,"contentItems":[{"type":"inputText","text":"failed validation"}]}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>()?.Contains("failed validation") == true, "Dynamic content lost.");
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Explicit unsuccessful result ignored.");
++            Fixture.Require(TurnDiagnostics.HasFailure(TurnDiagnostics.Extract([Project(item)])), "Live unsuccessful result ignored.");
++        });
++        check("saved command preserves exit code and duration", () =>
++        {
++            var item = JsonNode.Parse("""{"id":"i","type":"commandExecution","status":"completed","error":"","aggregatedOutput":"output","exitCode":7,"durationMs":123}""")!.AsObject();
++            var saved = Saved(item);
++            Fixture.Require(saved["text"]?.GetValue<string>() == "output", "Empty error shadows real output.");
++            Fixture.Require(saved["outcome"]?.GetValue<string>() == "failed", "Nonzero exit misclassified.");
++            Fixture.Require(saved["exitCode"]?.GetValue<int>() == 7 && saved["durationMs"]?.GetValue<int>() == 123, "Execution metadata lost.");
++        });
++    }
++
++    private static JsonObject Saved(JsonObject item) => ThreadSavedOutputProjector.Project(
++        new JsonArray(new JsonObject { ["id"] = "t", ["items"] = new JsonArray(item.DeepClone()) })).Outputs[0]!.AsObject();
++    private static AppServerNotification Project(JsonObject item) => new AppServerNotificationProjection().Project(
++        new AppServerNotification("item/completed", new JsonObject { ["threadId"] = "thread", ["turnId"] = "t", ["item"] = item.DeepClone() }))!;
++    private static ThreadItemOutputRange Page(JsonObject item, int offset = 0) => ThreadItemOutputRangeProjector.Project(
++        new JsonObject { ["data"] = new JsonArray(new JsonObject { ["turnId"] = "t", ["item"] = item.DeepClone() }) }, "thread", "t", "i", offset, 32_768);
++}
