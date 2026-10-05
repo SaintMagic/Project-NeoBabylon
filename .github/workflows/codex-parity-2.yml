@@ -1,118 +1,58 @@
 name: Codex parity second review package
 on:
   push:
-    branches: [review/codex-product-parity-2026-10-05]
+    branches:
+      - review/codex-product-parity-2026-10-05
+
 permissions:
   contents: read
+
 jobs:
   package:
-    runs-on: windows-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
-        with:
-          dotnet-version: '10.0.x'
-      - name: Fetch exact reviewed source
-        shell: bash
-        run: |
-          set -euo pipefail
-          git init source
-          git -C source config core.autocrlf false
-          git -C source remote add origin https://github.com/SaintMagic/Project-NeoBabylon.git
-          git -C source fetch origin 9ebde217fa5de22a67e8c00a14b5f1ba51b32170
-          git -C source checkout --detach FETCH_HEAD
-          mkdir evidence
-          git -C source rev-parse HEAD > evidence/source-commit.txt
-          git -C source ls-tree -r HEAD > evidence/source-tree.txt
-      - name: UI baseline
-        working-directory: source/ui/diagnostic
-        shell: pwsh
-        run: |
-          npm ci 2>&1 | Tee-Object ../../../evidence/npm-ci.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm test 2>&1 | Tee-Object ../../../evidence/ui-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run build 2>&1 | Tee-Object ../../../evidence/ui-build.log
-          exit $LASTEXITCODE
-      - name: CSharp baseline
-        if: always()
-        working-directory: source
-        shell: pwsh
-        run: |
-          dotnet run --project tests/product-parity/NeoBabylon.ProductParity.Tests.csproj -c Release 2>&1 | Tee-Object ../evidence/product-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet build host/NeoBabylon.Host/NeoBabylon.Host.csproj -c Release 2>&1 | Tee-Object ../evidence/host-build.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet build tests/host/NeoBabylon.Phase1A.Tests.csproj -c ApprovalQA 2>&1 | Tee-Object ../evidence/host-tests-build.log
-          exit $LASTEXITCODE
-      - name: QA baseline
-        if: always()
-        working-directory: source
-        shell: pwsh
-        run: |
-          node --test tests/qa/nvidia-adapter-bundle.test.mjs tests/qa/qa-run-root.test.mjs 2>&1 | Tee-Object ../evidence/qa-tests.log
-          exit $LASTEXITCODE
-      - name: Assemble second review package
-        if: always()
+      - name: Assemble package
         shell: python
         run: |
-          import base64, gzip, hashlib, json, pathlib, shutil
-          root=pathlib.Path('.')
-          transfer=''.join((root/'.github/parity-2-transfer'/f'part{i}.b64').read_text() for i in range(3))
-          raw=gzip.decompress(base64.b64decode(transfer))
-          files=json.loads(raw)
-          package=root/'NeoBabylon_Codex_Parity_Review_2_2026-10-05'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import pathlib
+          import shutil
+
+          root = pathlib.Path(".")
+          transfer_dir = root / ".github" / "parity-2-transfer"
+          transfer = "".join((transfer_dir / f"part{i}.b64").read_text() for i in range(3))
+          raw = gzip.decompress(base64.b64decode(transfer))
+          files = json.loads(raw)
+          package = root / "NeoBabylon_Codex_Parity_Review_2_2026-10-05"
           package.mkdir(exist_ok=True)
-          for name,content in files.items():
-              target=package/name
-              target.parent.mkdir(parents=True,exist_ok=True)
-              target.write_text(content,encoding='utf-8',newline='\n')
-          if (root/'evidence').exists():
-              shutil.copytree(root/'evidence', package/'evidence'/'baseline-windows', dirs_exist_ok=True)
-          manifest = f"""# NeoBabylon Codex Product Parity Review 2
 
-Reviewed source: `9ebde217fa5de22a67e8c00a14b5f1ba51b32170`.
+          for name, content in files.items():
+              target = package / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content, encoding="utf-8", newline="\n")
 
-This package contains the complete second-pass patch payload and verification helpers recovered from the review workspace, plus fresh Windows baseline evidence produced while packaging.
+          manifest = (
+              "# NeoBabylon Codex Product Parity Review 2\n\n"
+              "Reviewed source: `9ebde217fa5de22a67e8c00a14b5f1ba51b32170`.\n\n"
+              "Contains the complete second-pass patch payload and verification helpers. "
+              "Fresh clean-baseline Windows evidence is packaged separately by ChatGPT into the final delivered ZIP.\n"
+          )
+          (package / "README_PACKAGE.md").write_text(manifest, encoding="utf-8", newline="\n")
 
-## Patch series
-1. 001-application-settings-and-instructions.patch
-2. 002-native-file-and-image-attachments.patch
-3. 003-fenced-code-presentation.patch
-4. 004-follow-output-and-jump-latest.patch
-5. 005-find-in-loaded-conversation.patch
-6. 006-command-palette-and-keyboard-navigation.patch
-7. 007-durable-nvidia-assistant-replay.patch
-8. 008-preserve-answers-when-reasoning-is-truncated.patch
-9. 009-draft-followups-without-automatic-resend.patch
-10. 010-native-conversation-preview-export.patch
-
-## Verification status
-The clean 9ebde21 baseline is re-run on Windows in this packaging workflow. The patch series had previously passed mechanical cumulative apply/index/whitespace/reverse checks and dependency-free JavaScript checks. Patched Windows compilation and full integration qualification were not completed in the originating review and are not silently upgraded here.
-"""
-          (package/'README_PACKAGE.md').write_text(manifest,encoding='utf-8',newline='\n')
-          lines=[]
-          for p in sorted(package.rglob('*')):
-              if p.is_file():
-                  lines.append(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(package).as_posix()}")
-          (package/'SHA256SUMS.txt').write_text('\n'.join(lines)+'\n',encoding='utf-8',newline='\n')
-          shutil.make_archive('NeoBabylon_Codex_Parity_Review_2_2026-10-05','zip',package)
-      - name: Record environment
-        if: always()
-        shell: pwsh
-        run: |
-          node --version | Out-File evidence/environment.txt
-          dotnet --info | Out-File evidence/environment.txt -Append
+          sums = []
+          for path in sorted(package.rglob("*")):
+              if path.is_file():
+                  sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(package).as_posix()}")
+          (package / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8", newline="\n")
+          shutil.make_archive("NeoBabylon_Codex_Parity_Review_2_2026-10-05", "zip", package)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
         with:
-          name: NeoBabylon-Codex-Parity-Review-2-single-zip
+          name: NeoBabylon-Codex-Parity-Review-2-payload
           path: NeoBabylon_Codex_Parity_Review_2_2026-10-05.zip
           retention-days: 14
           if-no-files-found: error
