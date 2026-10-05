@@ -1,102 +1,18 @@
-name: Codex parity second review package
+name: Codex parity second review transfer export
 on:
   push:
     branches:
       - review/codex-product-parity-2026-10-05
-
 permissions:
   contents: read
-
 jobs:
-  package:
+  export:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Diagnose and assemble package
-        shell: python
-        run: |
-          import base64, gzip, hashlib, json, pathlib, shutil, zlib
-          root=pathlib.Path(".")
-          td=root/".github"/"parity-2-transfer"
-          parts=["".join((td/f"part{i}.b64").read_text().split()) for i in range(3)]
-          transfer="".join(parts)
-          padded=transfer+"="*(-len(transfer)%4)
-          data=base64.b64decode(padded)
-          obj=zlib.decompressobj(16+zlib.MAX_WBITS)
-          error_at=None
-          out=bytearray()
-          for i,b in enumerate(data):
-              try:
-                  out.extend(obj.decompress(bytes([b])))
-              except Exception as ex:
-                  error_at=i
-                  print("DEFLATE_ERROR_BYTE",i,"BASE64_APPROX",i*4//3,"OUT_BYTES",len(out),repr(ex))
-                  break
-          if error_at is None:
-              print("NO_INCREMENTAL_ERROR")
-          approx=error_at*4//3 if error_at is not None else len(transfer)//2
-          alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-          files=None
-          repair=None
-          def attempt(t,desc):
-              global files, repair
-              try:
-                  raw=gzip.decompress(base64.b64decode(t+"="*(-len(t)%4)))
-                  parsed=json.loads(raw)
-                  if isinstance(parsed,dict) and any("001-application-settings-and-instructions.patch" in k for k in parsed):
-                      files=parsed; repair=desc; return True
-              except Exception:
-                  return False
-              return False
-          # First exact.
-          attempt(transfer,"exact")
-          # Search one/two deleted characters near first DEFLATE failure.
-          if files is None:
-              lo=max(0,approx-160); hi=min(len(transfer),approx+160)
-              for pos in range(lo,hi):
-                  if attempt(transfer[:pos]+transfer[pos+1:],f"delete1@{pos}"): break
-              if files is None:
-                  for pos in range(lo,hi):
-                      if attempt(transfer[:pos]+transfer[pos+2:],f"delete2@{pos}"): break
-          # Search one substitution or insertion near failure.
-          if files is None:
-              lo=max(0,approx-64); hi=min(len(transfer),approx+64)
-              for pos in range(lo,hi):
-                  orig=transfer[pos]
-                  for ch in alphabet:
-                      if ch==orig: continue
-                      if attempt(transfer[:pos]+ch+transfer[pos+1:],f"sub@{pos}:{orig}>{ch}"): break
-                  if files is not None: break
-          if files is None:
-              for pos in range(lo,hi+1):
-                  for ch in alphabet:
-                      if attempt(transfer[:pos]+ch+transfer[pos:],f"insert@{pos}:{ch}"): break
-                  if files is not None: break
-          if files is None:
-              raise RuntimeError("Unable to recover transfer with bounded single-edit search.")
-
-          print("TRANSFER_REPAIR",repair)
-          package=root/"NeoBabylon_Codex_Parity_Review_2_2026-10-05"
-          package.mkdir(exist_ok=True)
-          for name,content in files.items():
-              target=package/name
-              target.parent.mkdir(parents=True,exist_ok=True)
-              target.write_text(content,encoding="utf-8",newline="\n")
-          (package/"README_PACKAGE.md").write_text(
-              "# NeoBabylon Codex Product Parity Review 2\n\n"
-              "Reviewed source: `9ebde217fa5de22a67e8c00a14b5f1ba51b32170`.\n\n"
-              f"Recovered transfer repair: {repair}.\n",
-              encoding="utf-8",newline="\n")
-          sums=[]
-          for p in sorted(package.rglob("*")):
-              if p.is_file():
-                  sums.append(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(package).as_posix()}")
-          (package/"SHA256SUMS.txt").write_text("\n".join(sums)+"\n",encoding="utf-8",newline="\n")
-          shutil.make_archive("NeoBabylon_Codex_Parity_Review_2_2026-10-05","zip",package)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: NeoBabylon-Codex-Parity-Review-2-payload
-          path: NeoBabylon_Codex_Parity_Review_2_2026-10-05.zip
+          name: neobabylon-parity-2-transfer-raw
+          path: .github/parity-2-transfer/
           retention-days: 14
           if-no-files-found: error
