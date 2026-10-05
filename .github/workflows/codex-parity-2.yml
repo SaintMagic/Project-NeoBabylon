@@ -24,15 +24,45 @@ jobs:
           import shutil
 
           root = pathlib.Path(".")
-          transfer_dir = root / ".github" / "parity-2-transfer"
-          transfer = "".join((transfer_dir / f"part{i}.b64").read_text() for i in range(3))
-          transfer = "".join(transfer.split())
-          transfer += "=" * (-len(transfer) % 4)
-          raw = gzip.decompress(base64.b64decode(transfer))
-          files = json.loads(raw)
+          td = root / ".github" / "parity-2-transfer"
+          parts = ["".join((td / f"part{i}.b64").read_text().split()) for i in range(3)]
+
+          raw = None
+          repair = None
+          # The transfer was created by splitting one base64 stream. Try the
+          # exact join first, then bounded boundary trims only. Do not mutate
+          # payload content away from the two split points.
+          for e0 in range(5):
+              for s1 in range(5):
+                  for e1 in range(5):
+                      for s2 in range(5):
+                          p0 = parts[0][:-e0] if e0 else parts[0]
+                          p1 = parts[1][s1:len(parts[1])-e1 if e1 else None]
+                          p2 = parts[2][s2:]
+                          transfer = p0 + p1 + p2
+                          transfer += "=" * (-len(transfer) % 4)
+                          try:
+                              candidate = gzip.decompress(base64.b64decode(transfer))
+                              parsed = json.loads(candidate)
+                          except Exception:
+                              continue
+                          if not isinstance(parsed, dict):
+                              continue
+                          if not any("001-application-settings-and-instructions.patch" in k for k in parsed):
+                              continue
+                          raw = candidate
+                          files = parsed
+                          repair = (e0, s1, e1, s2)
+                          break
+                      if raw is not None: break
+                  if raw is not None: break
+              if raw is not None: break
+
+          if raw is None:
+              raise RuntimeError("Unable to recover transfer with bounded split-boundary repair.")
+
           package = root / "NeoBabylon_Codex_Parity_Review_2_2026-10-05"
           package.mkdir(exist_ok=True)
-
           for name, content in files.items():
               target = package / name
               target.parent.mkdir(parents=True, exist_ok=True)
@@ -41,15 +71,14 @@ jobs:
           manifest = (
               "# NeoBabylon Codex Product Parity Review 2\n\n"
               "Reviewed source: `9ebde217fa5de22a67e8c00a14b5f1ba51b32170`.\n\n"
-              "Contains the complete second-pass patch payload and verification helpers. "
-              "Fresh clean-baseline Windows evidence is packaged separately by ChatGPT into the final delivered ZIP.\n"
+              f"Recovered transfer boundary repair: {repair}.\n\n"
+              "Contains the complete second-pass patch payload and verification helpers.\n"
           )
           (package / "README_PACKAGE.md").write_text(manifest, encoding="utf-8", newline="\n")
-
           sums = []
-          for path in sorted(package.rglob("*")):
-              if path.is_file():
-                  sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(package).as_posix()}")
+          for item in sorted(package.rglob("*")):
+              if item.is_file():
+                  sums.append(f"{hashlib.sha256(item.read_bytes()).hexdigest()}  {item.relative_to(package).as_posix()}")
           (package / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n", encoding="utf-8", newline="\n")
           shutil.make_archive("NeoBabylon_Codex_Parity_Review_2_2026-10-05", "zip", package)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
