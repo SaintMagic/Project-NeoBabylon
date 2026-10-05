@@ -1705,6 +1705,46 @@ Check("saved transcript detects only the pinned App Server omission marker", () 
         "a loose non-App-Server omission phrase was reported as upstream truncation");
 });
 
+Check("saved transcript retains bounded readable reasoning items with turn identity", () =>
+{
+    var source = JsonNode.Parse("""
+    [{"id":"turn-reasoning","items":[
+      {"id":"reasoning-content","type":"reasoning","summary":["summary"],"content":[" first\n","second "],"encryptedContent":"opaque"},
+      {"id":"reasoning-summary","type":"reasoning","summary":["visible summary"],"content":[],"encryptedContent":"opaque"},
+      {"id":"reasoning-empty","type":"reasoning","summary":[],"content":[],"encryptedContent":"opaque"},
+      {"id":"assistant-1","type":"agentMessage","text":"answer"}
+    ]}]
+    """)!.AsArray();
+    var projected = ThreadTranscriptProjector.Project(source, 100);
+    var items = projected.Turns[0]!["items"]!.AsArray();
+    Assert(items.Count == 3, "saved transcript did not filter empty reasoning while retaining answer");
+    Assert(items[0]?["type"]?.GetValue<string>() == "reasoning"
+        && items[0]?["content"]?[0]?.GetValue<string>() == " first\n"
+        && items[0]?["id"]?.GetValue<string>() == "reasoning-content",
+        "readable reasoning content or its exact item identity was altered");
+    Assert(items[1]?["summary"]?.AsArray().Count == 1 && items[1]?["content"]?.AsArray().Count == 0,
+        "summary-only reasoning was not retained in the selected summary channel");
+    Assert(!projected.Turns.ToJsonString().Contains("opaque", StringComparison.Ordinal),
+        "encrypted reasoning crossed the saved transcript boundary");
+
+    var manyParts = new JsonArray(Enumerable.Range(0, 1_000)
+        .Select(_ => (JsonNode?)JsonValue.Create("")).Append(JsonValue.Create("hidden tail")).ToArray());
+    var oversizedParts = new JsonArray(new JsonObject
+    {
+        ["id"] = "turn-many-parts",
+        ["items"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "reasoning-many-parts",
+            ["type"] = "reasoning",
+            ["summary"] = new JsonArray(),
+            ["content"] = manyParts
+        })
+    });
+    var omitted = ThreadTranscriptProjector.Project(oversizedParts, 100);
+    Assert(omitted.Truncated && omitted.Turns.Count == 0,
+        "saved transcript copied unbounded reasoning parts or created a fake empty section");
+});
+
 Check("live output projection bounds assistant and tool payloads with explicit omission counts", () =>
 {
     var projector = new AppServerNotificationProjection();
@@ -1779,12 +1819,108 @@ Check("live output projection bounds assistant and tool payloads with explicit o
         "terminal partial-output metadata did not report the exact omission or persistence state");
 });
 
+Check("live reasoning projection preserves notification identity, indexed text, bounds, and completion authority", () =>
+{
+    var projector = new AppServerNotificationProjection();
+    var delta = projector.Project(new AppServerNotification("item/reasoning/summaryTextDelta", new JsonObject
+    {
+        ["threadId"] = "thread-reasoning",
+        ["turnId"] = "turn-reasoning",
+        ["itemId"] = "reasoning-live",
+        ["summaryIndex"] = 3,
+        ["delta"] = "  summary\\n"
+    }));
+    Assert(delta?.Params["threadId"]?.GetValue<string>() == "thread-reasoning"
+        && delta.Params["turnId"]?.GetValue<string>() == "turn-reasoning"
+        && delta.Params["itemId"]?.GetValue<string>() == "reasoning-live"
+        && delta.Params["summaryIndex"]?.GetValue<int>() == 3
+        && delta.Params["delta"]?.GetValue<string>() == "  summary\\n",
+        "reasoning delta identity, indexed field, or whitespace changed");
+
+    var completion = projector.Project(new AppServerNotification("item/completed", new JsonObject
+    {
+        ["threadId"] = "thread-reasoning",
+        ["turnId"] = "turn-reasoning",
+        ["item"] = new JsonObject
+        {
+            ["id"] = "reasoning-live",
+            ["type"] = "reasoning",
+            ["summary"] = new JsonArray(new string('s', 120_000)),
+            ["content"] = new JsonArray(new string('c', 120_007)),
+            ["encryptedContent"] = "opaque secret payload"
+        }
+    }));
+    Assert(completion?.Params["item"]?["content"]?[0]?.GetValue<string>()?.Length
+            == AppServerNotificationProjection.AssistantDisplayLimit,
+        "completed reasoning crossed the existing bounded display budget");
+    Assert(completion!.Params["item"]?["neoBabylonDisplay"]?["omittedCharacters"]?.GetValue<int>() == 7
+        && completion.Params["item"]?["neoBabylonDisplay"]?["sourceRetained"]?.GetValue<bool>() == true,
+        "completed reasoning omission notice did not report exact retained source");
+    Assert(!completion.Params.ToJsonString().Contains("opaque secret payload", StringComparison.Ordinal),
+        "opaque encrypted reasoning crossed the UI projection");
+    Assert(projector.Project(new AppServerNotification("item/reasoning/textDelta", new JsonObject
+        {
+            ["threadId"] = "thread-reasoning",
+            ["turnId"] = "turn-reasoning",
+            ["itemId"] = "reasoning-live",
+            ["contentIndex"] = 0,
+            ["delta"] = "stale trailing delta"
+        })) is null,
+        "a late streamed delta was allowed to override completed reasoning");
+
+    var manyParts = projector.Project(new AppServerNotification("item/completed", new JsonObject
+    {
+        ["threadId"] = "thread-reasoning",
+        ["turnId"] = "turn-many-parts",
+        ["item"] = new JsonObject
+        {
+            ["id"] = "reasoning-many-parts",
+            ["type"] = "reasoning",
+            ["summary"] = new JsonArray(),
+            ["content"] = new JsonArray(Enumerable.Range(0, 1_000)
+                .Select(_ => (JsonNode?)JsonValue.Create("")).ToArray())
+        }
+    }));
+    Assert(manyParts?.Params["item"]?["content"]?.AsArray().Count == 128
+        && manyParts.Params["item"]?["neoBabylonDisplay"]?["omittedParts"]?.GetValue<bool>() == true,
+        "reasoning part-count bounds or the omission notice were missing");
+
+    var overflow = new AppServerNotificationProjection();
+    Assert(overflow.Project(new AppServerNotification("item/reasoning/textDelta", new JsonObject
+        {
+            ["threadId"] = "thread-overflow",
+            ["turnId"] = "turn-overflow",
+            ["itemId"] = "reasoning-overflow",
+            ["contentIndex"] = 0,
+            ["delta"] = new string('x', AppServerNotificationProjection.AssistantDisplayLimit)
+        })) is not null,
+        "the exact-limit reasoning chunk was not displayed");
+    Assert(overflow.Project(new AppServerNotification("item/reasoning/textDelta", new JsonObject
+        {
+            ["threadId"] = "thread-overflow",
+            ["turnId"] = "turn-overflow",
+            ["itemId"] = "reasoning-overflow",
+            ["contentIndex"] = 0,
+            ["delta"] = "omitted"
+        })) is null,
+        "a fully omitted reasoning chunk crossed the display limit");
+    var omitted = overflow.Complete(turnCompleted: false).Single(notification =>
+        notification.Method == "neobabylon/reasoningTruncated");
+    Assert(omitted.Params["threadId"]?.GetValue<string>() == "thread-overflow"
+        && omitted.Params["turnId"]?.GetValue<string>() == "turn-overflow"
+        && omitted.Params["itemId"]?.GetValue<string>() == "reasoning-overflow"
+        && omitted.Params["neoBabylonDisplay"]?["omittedCharacters"]?.GetValue<int>() == 7
+        && omitted.Params["neoBabylonDisplay"]?["sourceRetained"]?.GetValue<bool>() == false,
+        "fully omitted reasoning did not produce exact identity-bound retention evidence");
+});
+
 Check("saved App Server item output exposes bounded, identity-checked ranges", () =>
 {
     var page = JsonNode.Parse("""
     {"data":[
       {"turnId":"turn-1","item":{"id":"assistant-1","type":"agentMessage","text":"abcdefghij"}},
-      {"turnId":"turn-1","item":{"id":"tool-1","type":"commandExecution","aggregatedOutput":"0123456789"}}
+      {"turnId":"turn-1","item":{"id":"tool-1","type":"commandExecution","aggregatedOutput":"0123456789"}},
+      {"turnId":"turn-1","item":{"id":"reasoning-1","type":"reasoning","content":["first ","second"],"summary":["unused summary"]}}
     ],"nextCursor":null}
     """)!.AsObject();
     var assistant = ThreadItemOutputRangeProjector.Project(page, "thread-1", "turn-1", "assistant-1", offset: 3, maximumCharacters: 4);
@@ -1792,6 +1928,25 @@ Check("saved App Server item output exposes bounded, identity-checked ranges", (
         "assistant item range was not bounded or positioned exactly");
     var tool = ThreadItemOutputRangeProjector.Project(page, "thread-1", "turn-1", "tool-1", offset: 6, maximumCharacters: 10);
     Assert(tool.Text == "6789" && !tool.HasMore, "tool output tail range was not reconstructed exactly");
+    var reasoning = ThreadItemOutputRangeProjector.Project(page, "thread-1", "turn-1", "reasoning-1", offset: 6, maximumCharacters: 4);
+    Assert(reasoning.ThreadId == "thread-1" && reasoning.TurnId == "turn-1"
+        && reasoning.ItemType == "reasoning" && reasoning.Text == "seco"
+        && reasoning.TotalCharacters == 12 && reasoning.NextOffset == 10 && reasoning.HasMore,
+        "reasoning inspection did not select ordered content or preserve its reasoning item type");
+    var summaryPage = JsonNode.Parse("""
+    [{"turnId":"turn-1","item":{"id":"reasoning-summary","type":"reasoning","content":[],"summary":["summary ","only"]}}]
+    """)!.AsArray();
+    var summary = ThreadItemOutputRangeProjector.TryProject(summaryPage, "thread-1", "turn-1", "reasoning-summary", 0, 32);
+    Assert(summary?.Text == "summary only" && summary.ItemType == "reasoning",
+        "summary-only reasoning was not available through the bounded range projector");
+    var excessiveParts = new JsonArray(Enumerable.Range(0, 129).Select(_ => (JsonNode?)JsonValue.Create("")).ToArray());
+    excessiveParts[128] = JsonValue.Create("hidden");
+    var boundedParts = JsonNode.Parse("""[{"turnId":"turn-1","item":{"id":"reasoning-many","type":"reasoning","content":[],"summary":[]}}]""")!.AsArray();
+    ((JsonObject)boundedParts[0]!["item"]!)!["content"] = excessiveParts;
+    var cappedParts = ThreadItemOutputRangeProjector.Project(
+        new JsonObject { ["data"] = boundedParts }, "thread-1", "turn-1", "reasoning-many", 0, 10);
+    Assert(cappedParts.Text.Length == 0 && cappedParts.OmittedParts,
+        "reasoning range did not truthfully mark parts omitted by its bounded projection");
     AssertThrows<InvalidDataException>(() => ThreadItemOutputRangeProjector.Project(page, "thread-1", "other-turn", "assistant-1", 0, 10));
     AssertThrows<ArgumentOutOfRangeException>(() => ThreadItemOutputRangeProjector.Project(page, "thread-1", "turn-1", "assistant-1", 0, 0));
 });
@@ -2083,7 +2238,7 @@ Check("turn diagnostics expose a failed command outcome", () =>
     Assert(item["failure"]?["message"]?.GetValue<string>() == "blocked by policy", "command failure was not retained");
 });
 
-Check("session journal tool outcomes are paired, typed, and do not expose raw tool output", () =>
+Check("session journal tool outcomes are paired, typed, and retain normal tool output", () =>
 {
     var root = Path.Combine(Path.GetTempPath(), "NeoBabylon-Phase1B-Tests", Guid.NewGuid().ToString("N"));
     var codexHome = Path.Combine(root, "CodexHome");
@@ -2112,8 +2267,12 @@ Check("session journal tool outcomes are paired, typed, and do not expose raw to
     Assert(outcomes["call-fail"]["failure"]?["type"]?.GetValue<string>() == "toolExecution", "journal failure did not receive a structured toolExecution type");
     Assert(outcomes["call-success"]["itemId"]?.GetValue<string>() == "fc-success", "successful function output was not paired with its call item");
     Assert(outcomes["call-success"]["succeeded"]?.GetValue<bool>() == true, "exit code zero was not reported as success");
+    Assert(outcomes["call-success"]["arguments"]?.GetValue<string>() == "{\"cmd\":\"cmd.exe /d /c ver\"}", "successful tool arguments were not retained exactly");
+    Assert(outcomes["call-success"]["outputItemId"]?.GetValue<string>() == "fco-success", "normal output lost its exact output-item identity");
+    Assert(outcomes["call-success"]["output"]?.GetValue<string>() == "Chunk ID: c1\nProcess exited with code 0\nOutput:\nOPENAI_API_KEY=sk-test-value-must-not-leak", "normal tool output was not retained exactly");
+    Assert(outcomes["call-success"]["sourceRetained"]?.GetValue<bool>() == true, "retained output identity was not marked");
     Assert(outcomes["call-unknown"]["outcome"]?.GetValue<string>() == "unknown", "missing function output was not left Unknown");
-    Assert(!diagnostics!.ToJsonString().Contains("sk-test-value-must-not-leak", StringComparison.Ordinal), "raw tool output leaked into UI diagnostics");
+    Assert(outcomes["call-unknown"]["output"] is null && outcomes["call-unknown"]["outputItemId"] is null, "missing output gained fabricated content or identity");
 });
 
 Check("App Server session journal preserves its effective context window", () =>

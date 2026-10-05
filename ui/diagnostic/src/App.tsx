@@ -1,13 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { readConversationLayout, saveConversationLayout } from "./conversation-layout.mjs";
+import { MessageActions } from "./MessageActions";
 import { Button } from "@astryxdesign/core/Button";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { listenToHost, requestHost, type HostNotification, type HostOperation } from "./bridge";
-import { appendAssistantDelta, boundTranscript, finishAssistantStreams, markAssistantTurnFailed, projectDisplayText, upsertAssistantMessage, type ChatMessage, type DisplayMetadata } from "./transcript.mjs";
+import { appendAssistantDelta, boundTranscript, finishAssistantStreams, markAssistantTurnFailed, projectDisplayText, transcriptMessageKey, upsertAssistantMessage, type ChatMessage, type DisplayMetadata } from "./transcript.mjs";
+import { upsertReasoningDelta, upsertReasoningItem } from "./reasoning-transcript.mjs";
 import { boundActivityHistory, type ActivityHistoryEntry } from "./activity-history.mjs";
+import { mergeActivityHistoryEntry, mergeOutputRange, projectOutputRangePage, toolActivityTitle, toolArgumentsText } from "./tool-activity.mjs";
 import { matchesLateCommandCompletion, mayStopCommand, requestCommandStop } from "./command-stop.mjs";
-import { createAssistantDeltaBatcher, type AssistantDeltaBatcher } from "./stream-batcher.mjs";
+import { assistantDeltaText, createAssistantDeltaBatcher, type AssistantDeltaBatcher } from "./stream-batcher.mjs";
 import { filterSavedThreads, mergeHistoryPages, savedHistoryState, savedThreadLabel, savedThreadSearchEmptyMessage, savedThreadUpdatedAt } from "./history.mjs";
-import { classifyActivityOutcome, createLiveTurnStatusMessage, resolveLiveTurnState, restoreSavedActivities, restoreTurnOutcome, restoreVisibleTranscript } from "./restoration.mjs";
+import { classifyActivityOutcome, createLiveTurnStatusMessage, resolveLiveTurnOutcome, restoreSavedActivities, restoreTurnOutcome, restoreVisibleTranscript } from "./restoration.mjs";
 import { approvalPresentation, invalidateApprovalReview } from "./approvals.mjs";
 import { executionPolicyPresentation } from "./execution-policy.mjs";
 import { hideFullAccessNotice, isFullAccessNoticeHidden } from "./full-access-notice.mjs";
@@ -46,10 +50,11 @@ type CandidateHostRequest = (operation: CandidateHostOperation, payload?: JsonRe
 type CapabilityEntry = { sourceFile: string; capabilityRecord: JsonRecord };
 const toolCapabilityCatalog = JSON.parse(toolCapabilityCatalogSource) as JsonRecord;
 type OutputInspectionLocation = { threadId: string; turnId: string; itemId: string; itemType: string; title: string };
-type OutputInspectionPage = { itemType: string; offset: number; totalCharacters: number; text: string; nextOffset: number; hasMore: boolean; upstreamTruncated: boolean };
+type OutputInspectionPage = { threadId: string; turnId: string; itemId: string; itemType: string; offset: number; totalCharacters: number; text: string; nextOffset: number; hasMore: boolean; upstreamTruncated: boolean; omittedParts: boolean };
 type ActivityEntry = ActivityHistoryEntry;
 type LateCommandNotificationBinding = { requestId: string; threadId: string; turnId: string; itemId: string };
 const CommandStopActionContext = createContext<((activity: ActivityEntry) => Promise<void>) | null>(null);
+const OutputRangeReaderContext = createContext<((location: OutputInspectionLocation, offset: number) => Promise<OutputInspectionPage>) | null>(null);
 type ApprovalRequest = {
   requestId: number;
   approvalInstanceId: string;
@@ -182,6 +187,13 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
 }
 
 export default function App({ appearance, onAppearanceChange }: { appearance: Appearance; onAppearanceChange: (appearance: Appearance) => void }) {
+  const [conversationLayout, setConversationLayout] = useState(readConversationLayout);
+  const [layoutStorageFailed, setLayoutStorageFailed] = useState(false);
+  function toggleConversationLayout() {
+    const next = conversationLayout === "readable" ? "wide" : "readable";
+    setConversationLayout(next);
+    setLayoutStorageFailed(!saveConversationLayout(next));
+  }
   const [runtime, setRuntime] = useState<JsonRecord | null>(null);
   const [capability, setCapability] = useState<JsonRecord | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityEntry[]>([]);
@@ -232,6 +244,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
   const [turnState, setTurnState] = useState<TurnState>("idle");
   const [startupError, setStartupError] = useState<string | null>(null);
   const [turnError, setTurnError] = useState<string | null>(null);
+  const [toolWarning, setToolWarning] = useState<string | null>(null);
   const [switchingModel, setSwitchingModel] = useState(false);
   const [openingThreadId, setOpeningThreadId] = useState<string | null>(null);
   const [forkingThread, setForkingThread] = useState(false);
@@ -869,6 +882,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
         setApprovalError(null);
         setTurnState("idle");
         setTurnError(null);
+        setToolWarning(null);
         setRestoredTurnWarning(null);
         setThreadSearch("");
         setShowModelMenu(false);
@@ -956,6 +970,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
 
     setOpeningThreadId(savedThread.id);
     setTurnError(null);
+    setToolWarning(null);
     try {
       const result = await requestHost<JsonRecord>("resumeThread", { threadId: savedThread.id });
       const resumedId = textValue(field(result, "threadId"));
@@ -1042,6 +1057,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       }
 
       recordActiveTask(forkedId);
+      setToolWarning(null);
       setOutputOverride("");
       setThreadId(forkedId);
       setThreadExecutionEligible(true);
@@ -1079,6 +1095,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
     }
     setCreatingNewTask(true);
     setTurnError(null);
+    setToolWarning(null);
     try {
       await requestHost<JsonRecord>("newTask");
       setOutputOverride("");
@@ -1116,6 +1133,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       return;
     }
     setTurnError(null);
+    setToolWarning(null);
     setRestoredTurnWarning(null);
     setTurnState("starting");
     const optimisticMessageId = crypto.randomUUID();
@@ -1194,12 +1212,11 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
         ...requestedEffort.wire,
         ...(requestedOutput.value === null ? {} : { maxOutputTokens: requestedOutput.value }),
       }, requestId);
-      const completedState = resolveLiveTurnState(result);
-      taskTelemetry.complete(requestId, result, completedState);
+      const turnOutcome = resolveLiveTurnOutcome(result);
+      taskTelemetry.complete(requestId, result, turnOutcome.state);
       assistantDeltaBatcherRef.current?.flush();
       setMessages((current) => finishAssistantStreams(current));
       acceptPendingSubmission(requestId);
-      const eventType = textValue(field(result, "eventType"));
       const reply = textValue(field(result, "assistantText"));
       const assistantDisplay = recordValue(field(result, "assistantDisplay")) as DisplayMetadata | undefined;
       const assistantItemId = textValue(field(result, "assistantItemId"));
@@ -1208,16 +1225,21 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       if (reply) upsertAssistant(reply, false, false, assistantItemId, assistantDisplay,
         responseTurnId, responseThreadId);
       const failure = recordValue(field(result, "failure"));
-      const failed = Boolean(failure) || eventType === "turnFailure" || eventType === "turnCompletedWithToolFailure";
-      if (failed) {
-        const message = textValue(field(failure, "message")) ?? "The turn ended with a reported tool failure.";
+      const providerTurnFailure = recordValue(field(result, "providerTurnFailure"));
+      const providerFailureMessage = textValue(field(providerTurnFailure, "message"));
+      setToolWarning(turnOutcome.warning);
+      if (turnOutcome.fatal) {
+        const providerAttribution = textValue(field(providerTurnFailure, "attributedTo"));
+        const message = providerFailureMessage
+          ? `${providerAttribution ?? "Provider turn failure"}: ${providerFailureMessage}`
+          : textValue(field(failure, "message")) ?? "The model turn failed before a verified completion.";
         setTurnError(message);
         if (reply) upsertAssistant(reply, false, true, assistantItemId, assistantDisplay, responseTurnId, responseThreadId);
         else setMessages((current) => markAssistantTurnFailed(current, optimisticMessageId, responseTurnId, responseThreadId));
       }
       const marker = createLiveTurnStatusMessage(result, `${requestId}-status`);
       if (marker) setMessages((current) => [...current, marker]);
-      setTurnState(completedState);
+      setTurnState(providerFailureMessage ? "failed" : turnOutcome.state);
       const context = recordValue(field(result, "modelContextEvidence"));
       if (context) setRuntime((current) => current ? { ...current, lastModelContextEvidence: context } : current);
       const toolDiagnostics = field(result, "toolDiagnostics");
@@ -1227,14 +1249,28 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
           if (!item) continue;
           const rawExitCode = field(item, "exitCode");
           const exitCode = typeof rawExitCode === "number" && Number.isSafeInteger(rawExitCode) ? rawExitCode : undefined;
+          const rawDuration = field(item, "durationMs");
+          const durationMs = typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : undefined;
           addActivity({
             id: textValue(field(item, "itemId")) ?? textValue(field(item, "callId")) ?? crypto.randomUUID(),
-            title: textValue(field(item, "toolName")) ?? textValue(field(item, "command")) ?? "Tool activity",
+            title: toolActivityTitle({
+              title: textValue(field(item, "toolName")),
+              toolName: textValue(field(item, "toolName")),
+              command: textValue(field(item, "command")),
+              argumentsValue: field(item, "arguments"),
+              itemType: textValue(field(item, "itemType")),
+            }),
             detail: textValue(field(item, "output")) ?? textValue(field(recordValue(field(item, "failure")), "message")),
+            ...(textValue(field(item, "command")) ? { command: textValue(field(item, "command")) } : {}),
+            ...(toolArgumentsText(field(item, "arguments")) === undefined ? {} : { argumentsText: toolArgumentsText(field(item, "arguments")) }),
+            ...(textValue(field(recordValue(field(item, "failure")), "message")) ? { errorText: textValue(field(recordValue(field(item, "failure")), "message")) } : {}),
             status: field(item, "succeeded") === true ? "succeeded" : field(item, "succeeded") === false ? "failed" : "info",
             ...(exitCode === undefined ? {} : { exitCode }),
+            ...(durationMs === undefined ? {} : { durationMs }),
             ...(recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined),
             itemType: textValue(field(item, "itemType")),
+            outputItemId: textValue(field(item, "outputItemId")),
+            sourceRetained: field(item, "sourceRetained") === true,
             threadId: textValue(field(result, "threadId")) ?? threadId ?? undefined,
             turnId: textValue(field(result, "turnId")) ?? latestTurnIdRef.current ?? undefined,
           });
@@ -1364,7 +1400,9 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
     };
     setActivities((current) => {
       const index = current.findIndex((item) => item.id === boundedActivity.id);
-      return index < 0 ? [...current, boundedActivity] : current.map((item, itemIndex) => itemIndex === index ? boundedActivity : item);
+      return index < 0 ? [...current, boundedActivity] : current.map((item, itemIndex) => itemIndex === index
+        ? mergeActivityHistoryEntry(item, boundedActivity)
+        : item);
     });
   }
 
@@ -1375,28 +1413,25 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
     }));
   }
 
-  async function loadOutputRange(location: OutputInspectionLocation, offset: number) {
+  async function readOutputRangePage(location: OutputInspectionLocation, offset: number): Promise<OutputInspectionPage> {
+    const result = await requestHost<JsonRecord>("readOutputRange", {
+      threadId: location.threadId,
+      turnId: location.turnId,
+      itemId: location.itemId,
+      offset,
+    });
+    return projectOutputRangePage(result, location, offset);
+  }
+
+  async function loadOutputRange(location: OutputInspectionLocation, offset: number, append = false) {
     const requestId = ++outputInspectionRequestRef.current;
     setOutputInspectionLoading(true);
     setOutputInspectionError(null);
     try {
-      const result = await requestHost<JsonRecord>("readOutputRange", {
-        threadId: location.threadId,
-        turnId: location.turnId,
-        itemId: location.itemId,
-        offset,
-      });
+      const nextPage = await readOutputRangePage(location, offset);
       if (requestId !== outputInspectionRequestRef.current) return;
       setOutputInspection(location);
-      setOutputInspectionPage({
-        itemType: textValue(field(result, "itemType")) ?? location.itemType,
-        offset: Number(field(result, "offset")) || 0,
-        totalCharacters: Number(field(result, "totalCharacters")) || 0,
-        text: textValue(field(result, "text")) ?? "",
-        nextOffset: Number(field(result, "nextOffset")) || 0,
-        hasMore: field(result, "hasMore") === true,
-        upstreamTruncated: field(result, "upstreamTruncated") === true,
-      });
+      setOutputInspectionPage((current) => append ? mergeOutputRange(current, nextPage) : nextPage);
     } catch (error) {
       if (requestId === outputInspectionRequestRef.current) {
         setOutputInspectionError(error instanceof Error ? error.message : "The saved output range could not be read.");
@@ -1562,7 +1597,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       lateCommandBindingsRef.current.delete(commandIdentityKey(notificationThreadId, notificationTurnId, itemId));
     }
     if (method === "item/agentMessage/delta" || method === "item/assistantMessage/delta") {
-      const delta = textValue(field(params, "delta"));
+      const delta = assistantDeltaText(field(params, "delta"));
       if (delta) {
         const id = textValue(field(params, "itemId")) ?? "assistant-current";
         const displayMetadata = recordValue(field(params, "neoBabylonDisplay")) as DisplayMetadata | undefined;
@@ -1570,12 +1605,41 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       }
       return;
     }
+    if (method === "neobabylon/reasoningTruncated") {
+      const itemId = textValue(field(params, "itemId"));
+      const exactThreadId = textValue(field(params, "threadId"));
+      const exactTurnId = textValue(field(params, "turnId"));
+      const display = recordValue(field(params, "neoBabylonDisplay"));
+      if (itemId && exactThreadId && exactTurnId && display) {
+        setMessages((current) => upsertReasoningItem(current, {
+          id: itemId,
+          type: "reasoning",
+          summary: [],
+          content: [],
+          neoBabylonDisplay: display,
+        }, { threadId: exactThreadId, turnId: exactTurnId }));
+      }
+      return;
+    }
+    if (method === "item/reasoning/summaryTextDelta" || method === "item/reasoning/textDelta") {
+      setMessages((current) => upsertReasoningDelta(current, method, params));
+      return;
+    }
     if (method === "item/started" && itemType && ["commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall"].includes(itemType)) {
       addActivity({ id: itemId, title: textValue(field(item, "command")) ?? textValue(field(item, "tool")) ?? `${itemType} started`, status: "running" });
       return;
     }
     if (method === "item/completed" && item) {
-      if (itemType === "agentMessage") {
+      if (itemType === "reasoning") {
+        const exactThreadId = notificationThreadId;
+        const exactTurnId = notificationTurnId;
+        if (exactThreadId && exactTurnId) {
+          setMessages((current) => upsertReasoningItem(current, item, {
+            threadId: exactThreadId,
+            turnId: exactTurnId,
+          }));
+        }
+      } else if (itemType === "agentMessage") {
         const body = textValue(field(item, "text"));
         const displayMetadata = recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined;
         const turnId = textValue(field(params, "turnId")) ?? latestTurnIdRef.current ?? undefined;
@@ -1590,15 +1654,31 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
         const rawExitCode = field(item, "exitCode");
         const exitCode = typeof rawExitCode === "number" && Number.isSafeInteger(rawExitCode) ? rawExitCode : undefined;
         const failure = textValue(rawFailure);
+        const rawDuration = field(item, "durationMs");
+        const durationMs = typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : undefined;
+        const reportedFailure = failure || (rawFailure != null && typeof rawFailure !== "string")
+          || (exitCode !== undefined && exitCode !== 0) || field(item, "success") === false;
         const displayMetadata = recordValue(field(item, "neoBabylonDisplay")) as DisplayMetadata | undefined;
         addActivity({
           id: itemId,
-          title: textValue(field(item, "command")) ?? itemType ?? "Tool activity",
-          detail: failure ?? textValue(field(item, "aggregatedOutput")) ?? textValue(field(item, "output")),
-          status: classifyActivityOutcome(status, rawFailure),
+          title: toolActivityTitle({
+            title: textValue(field(item, "command")) ?? textValue(field(item, "tool")),
+            command: textValue(field(item, "command")),
+            tool: textValue(field(item, "tool")),
+            itemType,
+            argumentsValue: field(item, "arguments") ?? field(item, "input"),
+          }),
+          detail: failure ?? textValue(field(item, "aggregatedOutput")) ?? textValue(field(item, "output")) ?? textValue(field(item, "result")) ?? textValue(field(item, "contentItems")),
+          ...(textValue(field(item, "command")) ? { command: textValue(field(item, "command")) } : {}),
+          ...(toolArgumentsText(field(item, "arguments") ?? field(item, "input")) === undefined ? {} : { argumentsText: toolArgumentsText(field(item, "arguments") ?? field(item, "input")) }),
+          ...(failure ? { errorText: failure } : {}),
+          status: classifyActivityOutcome(status, reportedFailure ? rawFailure || "Tool reported failure" : undefined),
           ...(exitCode === undefined ? {} : { exitCode }),
+          ...(durationMs === undefined ? {} : { durationMs }),
           ...displayMetadata,
           itemType,
+          outputItemId: itemId,
+          sourceRetained: true,
           threadId: textValue(field(params, "threadId")) ?? threadId ?? undefined,
           turnId: textValue(field(params, "turnId")) ?? latestTurnIdRef.current ?? undefined,
         });
@@ -1676,7 +1756,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
     resultCount: visibleThreads.length,
   });
 
-  return <CommandStopActionContext.Provider value={stopCommand}><div className="app-shell">
+  return <CommandStopActionContext.Provider value={stopCommand}><OutputRangeReaderContext.Provider value={readOutputRangePage}><div className="app-shell" data-conversation-layout={conversationLayout}>
     <aside className="sidebar" aria-label="Workspace navigation" inert={diagnosticsOpen || unapprovedToolsOpen || reviewOpen || Boolean(outputInspection)}>
       <div className="brand-lockup"><img className="brand-symbol" src="/favicon.svg" alt="" aria-hidden="true" /><div className="brand-copy"><strong>neobabylon</strong><span>DESKTOP AGENT WORKSPACE</span></div><IconButton className="icon-button sidebar-search" label="Search conversations" tooltip="Search conversations" variant="ghost" icon={<Icon name="search" />} onClick={() => threadSearchRef.current?.focus()} /></div>
       <Button className="new-task-button" label={creatingNewTask ? "Saving task…" : "New task"} variant="secondary" icon={<Icon name="plus" size={17} />} onClick={() => void startNewTask()} isDisabled={isBusy} tooltip={threadId ? "Close this view and preserve the saved App Server task" : "Start a task"} />
@@ -1758,6 +1838,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       <header className="topbar">
         <div className="breadcrumb"><span>Projects</span><Icon name="chevronRight" size={14} /><strong>{selectedProjectName}</strong><Icon name="chevronRight" size={14} /><span className="breadcrumb-current">{threadTitle}</span></div>
         <div className="topbar-actions">
+          <Button className="conversation-width-toggle" size="sm" variant="ghost" label={conversationLayout === "readable" ? "Wide chat" : "Readable chat"} tooltip={conversationLayout === "readable" ? "Use available conversation width" : "Limit conversation line length"} onClick={toggleConversationLayout} />
           <span className="runtime-pill"><span className="runtime-pill-dot" />Pinned App Server {appServerVersion}</span>
           <IconButton className="icon-button appearance-toggle" label={`Switch to ${appearance === "dark" ? "light" : "dark"} mode`} tooltip={`Switch to ${appearance === "dark" ? "light" : "dark"} mode`} variant="ghost" icon={<Icon name={appearance === "dark" ? "sun" : "moon"} size={17} />} onClick={toggleAppearance} />
           {threadId && <IconButton className="icon-button" label="Fork conversation" tooltip="Create a new task branch; keep the original" variant="ghost" icon={<Icon name="fork" size={17} />} onClick={() => void forkCurrentThread()} isDisabled={isBusy || threadReadOnly} />}
@@ -1778,11 +1859,12 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
               <button type="button" disabled={refreshingRecordRecovery} onClick={() => void refreshProtectedRecordRecoveryStatus().then(setRecordRecoveryRefreshMessage)}>{refreshingRecordRecovery ? "Refreshing host status…" : "Refresh host status"}</button>
             </div>
           </section>}
+          {layoutStorageFailed && <div className="history-note" role="status">Conversation width changed for this session only; the preference could not be saved.</div>}
           {historyTruncated && <div className="history-note" role="note">Some earlier or longer messages are omitted from this preview. Full history remains in Codex App Server.</div>}
           {savedOutputsTruncated && <div className="history-note" role="note">Showing the 64 newest saved tool outputs. Older output history remains in Codex App Server.</div>}
-          {activitiesTruncated && <div className="history-note" role="note">Older activity cards or text are omitted from this local preview to keep long sessions responsive. Saved tool output may still be available in task history.</div>}
+          {activitiesTruncated && <div className="history-note" role="note">One or more activity details are shortened in the card preview. Each card indicates whether saved output is available to load.</div>}
           <div className={`conversation-scroll ${messages.length ? "has-messages" : ""}`}>
-          {messages.length === 0 ? <div className="welcome-wrap"><div className="welcome-mark"><Icon name="spark" size={28} /></div><div className="eyebrow"><span className="eyebrow-line" />A THOUGHTFUL WAY TO BUILD<span className="eyebrow-line" /></div><h1>What are we<br /><span>working on today?</span></h1><p className="welcome-copy">A calm, capable workspace for the ideas you want to bring to life.</p><div className="welcome-context"><div className="context-icon"><Icon name="folder" size={15} /></div><div><span>Working in</span><strong>{shortPath(selectedWorkspace)}</strong></div><span className="context-separator" /><div className="context-ready"><span />App data isolated</div></div></div> : <div className="transcript"><div className="conversation-date"><span />TODAY<span /></div>{messages.map((message) => message.role === "status" ? <div className={message.transcriptWindowOmission ? "history-note" : "turn-status-line"} role={message.transcriptWindowOmission ? "note" : "status"} key={message.id}>{!message.transcriptWindowOmission && <Icon name="alert" size={14} />}<span>{message.text}</span></div> : <article className={`message message-${message.role} ${message.failed ? "message-failed" : ""}`} key={message.id}><div className={`message-avatar ${message.role === "assistant" ? "assistant-avatar" : "user-avatar"}`}>{message.role === "assistant" ? <Icon name="spark" size={15} /> : "M"}</div><div className="message-body"><div className="message-meta"><strong>{message.role === "assistant" ? "NeoBabylon" : "You"}</strong>{message.streaming && <span className="typing-indicator"><i /><i /><i /> working</span>}</div><div className="message-text">{message.text}{message.streaming && <span className="stream-cursor" />}</div>{(message.displayTruncated || message.upstreamTruncated) && <div className="output-truncation-note" role="note"><span>{message.displayTruncated ? `Showing a bounded preview; ${message.omittedCharacters ?? "some"} characters are omitted.` : "App Server indicates that source output was already truncated."}</span>{message.sourceRetained && message.threadId && message.turnId ? <button type="button" onClick={() => inspectOutput({ threadId: message.threadId!, turnId: message.turnId!, itemId: message.id, itemType: "agentMessage", title: "Assistant response" })}>Inspect saved output</button> : <span>The partial output was not saved by App Server and cannot be restored.</span>}{message.upstreamTruncated && <span>App Server reports an upstream omission; source bytes omitted before persistence are unavailable.</span>}</div>}</div></article>)}{activities.length > 0 && <div className="activity-stack" aria-label="Agent activity">{activities.map((activity) => <ActivityCard activity={activity} key={activity.id} onInspect={inspectOutput} />)}</div>}{turnReview && turnReview.status !== "awaiting" && turnReview.threadId === threadId && <div className="review-activity"><span><Icon name="folder" size={15} /> App Server tracked changes</span><button type="button" onClick={(event) => { reviewOpenerRef.current = event.currentTarget; setReviewOpen(true); }}>Review changes</button></div>}{approvalRequests.length > 0 && <div className="approval-stack" role="region" aria-label="Pending App Server approvals" aria-live="polite">{approvalRequests.map((request) => <ApprovalCard key={request.requestId} request={request} isResolving={resolvingApprovalId !== null} error={approvalError?.requestId === request.requestId ? approvalError.message : undefined} onDecision={(decision) => void respondToApproval(request, decision)} />)}</div>}{turnState === "running" && !messages.some((message) => message.streaming) && approvalRequests.length === 0 && <div className="assistant-thinking"><span className="thinking-mark"><Icon name="spark" size={15} /></span><span className="thinking-dots"><i /><i /><i /></span><span>Thinking through your request</span></div>}{turnError && <div className="turn-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}</div>}
+          {messages.length === 0 ? <div className="welcome-wrap"><div className="welcome-mark"><Icon name="spark" size={28} /></div><div className="eyebrow"><span className="eyebrow-line" />A THOUGHTFUL WAY TO BUILD<span className="eyebrow-line" /></div><h1>What are we<br /><span>working on today?</span></h1><p className="welcome-copy">A calm, capable workspace for the ideas you want to bring to life.</p><div className="welcome-context"><div className="context-icon"><Icon name="folder" size={15} /></div><div><span>Working in</span><strong>{shortPath(selectedWorkspace)}</strong></div><span className="context-separator" /><div className="context-ready"><span />App data isolated</div></div></div> : <div className="transcript"><div className="conversation-date"><span />TODAY<span /></div>{messages.map((message) => <TranscriptEntry key={transcriptMessageKey(message)} message={message} onInspect={inspectOutput} />)}{toolWarning && <div className="provider-warning tool-warning" role="status"><Icon name="alert" size={14} /><span>{toolWarning}</span></div>}{activities.length > 0 && <div className="activity-stack" aria-label="Agent activity">{activities.map((activity) => <ActivityCard activity={activity} key={activity.id} onInspect={inspectOutput} />)}</div>}{turnReview && turnReview.status !== "awaiting" && turnReview.threadId === threadId && <div className="review-activity"><span><Icon name="folder" size={15} /> App Server tracked changes</span><button type="button" onClick={(event) => { reviewOpenerRef.current = event.currentTarget; setReviewOpen(true); }}>Review changes</button></div>}{approvalRequests.length > 0 && <div className="approval-stack" role="region" aria-label="Pending App Server approvals" aria-live="polite">{approvalRequests.map((request) => <ApprovalCard key={request.requestId} request={request} isResolving={resolvingApprovalId !== null} error={approvalError?.requestId === request.requestId ? approvalError.message : undefined} onDecision={(decision) => void respondToApproval(request, decision)} />)}</div>}{turnState === "running" && !messages.some((message) => message.streaming) && approvalRequests.length === 0 && <div className="assistant-thinking"><span className="thinking-mark"><Icon name="spark" size={15} /></span><span className="thinking-dots"><i /><i /><i /></span><span>Thinking through your request</span></div>}{turnError && <div className="turn-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}</div>}
             {turnError && messages.length === 0 && <div className="turn-error empty-state-error" role="alert"><Icon name="alert" size={16} /><span>{turnError}</span></div>}
             {startupError && <div className="startup-error" role="alert"><Icon name="alert" size={16} /><div><strong>Desktop host not connected</strong><span>{startupError}</span></div></div>}
           </div>
@@ -1882,7 +1964,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
       loading={outputInspectionLoading}
       error={outputInspectionError}
       onClose={closeOutputInspection}
-      onLoadRange={(offset) => void loadOutputRange(outputInspection, offset)}
+      onLoadRange={(offset) => void loadOutputRange(outputInspection, offset, true)}
     />}
     {renameTarget && <div className="rename-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRenameDialog(); }}>
       <section ref={renameDialogRef} tabIndex={-1} className="rename-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-dialog-title" onKeyDown={(event) => handleDialogKeyDown(event, renameDialogRef.current, closeRenameDialog)}>
@@ -1897,7 +1979,7 @@ export default function App({ appearance, onAppearanceChange }: { appearance: Ap
         </form>
       </section>
     </div>}
-  </div></CommandStopActionContext.Provider>;
+  </div></OutputRangeReaderContext.Provider></CommandStopActionContext.Provider>;
 }
 
 function ApprovalCard({ request, isResolving, error, onDecision }: {
@@ -1950,9 +2032,116 @@ function ApprovalCard({ request, isResolving, error, onDecision }: {
   </section>;
 }
 
-function ActivityCard({ activity, onInspect }: { activity: ActivityEntry; onInspect: (location: OutputInspectionLocation) => void }) {
-  const inspectable = (activity.displayTruncated === true || activity.upstreamTruncated === true) && activity.sourceRetained === true
-    && Boolean(activity.threadId && activity.turnId && activity.itemType);
+function TranscriptEntry({ message, onInspect }: {
+  message: ChatMessage;
+  onInspect: (location: OutputInspectionLocation) => void;
+}) {
+  if (message.role === "status") {
+    const omitted = Boolean(message.transcriptWindowOmission);
+    return <div className={omitted ? "history-note" : "turn-status-line"}
+      role={omitted ? "note" : "status"} key={message.id}>
+      {!omitted && <Icon name="alert" size={14} />}<span>{message.text}</span>
+    </div>;
+  }
+
+  const reasoning = message.role === "reasoning";
+  const assistant = message.role === "assistant";
+  return <article className={"message message-" + message.role + (message.failed ? " message-failed" : "")} key={message.id}>
+    {!reasoning && <div className={"message-avatar " + (assistant ? "assistant-avatar" : "user-avatar")}>
+      {assistant ? <Icon name="spark" size={15} /> : "M"}
+    </div>}
+    <div className="message-body">
+      <div className="message-meta">
+        <strong>{reasoning ? message.reasoningLabel ?? "Reasoning" : assistant ? "Message" : "You"}</strong>
+        {assistant && <span className="message-attribution">NeoBabylon</span>}
+        {message.streaming && <span className="typing-indicator"><i /><i /><i /> working</span>}
+        <MessageActions text={message.text} truncated={message.displayTruncated || message.upstreamTruncated} streaming={message.streaming} />
+      </div>
+      <div className="message-text">{message.text}{message.streaming && <span className="stream-cursor" />}</div>
+      {(message.displayTruncated || message.upstreamTruncated) && <div className="output-truncation-note" role="note">
+        <span>{message.displayTruncated
+          ? message.omittedParts
+            ? (message.omittedCharacters
+              ? "At least " + message.omittedCharacters + " characters and additional parts were omitted from this preview."
+              : "Additional parts were omitted from this preview.")
+            : "Showing a bounded preview; " + (message.omittedCharacters ?? "some") + " characters are omitted."
+          : "App Server indicates that source output was already truncated."}</span>
+        {reasoning
+          ? message.sourceRetained && message.threadId && message.turnId
+            ? <button type="button" onClick={() => onInspect({
+              threadId: message.threadId!,
+              turnId: message.turnId!,
+              itemId: message.id,
+              itemType: "reasoning",
+              title: message.reasoningLabel ?? "Reasoning",
+            })}>Inspect saved reasoning</button>
+            : <span>{message.sourceRetained
+              ? "The remaining reasoning is retained in App Server history, but this item cannot be inspected from this transcript."
+              : "Retention of the omitted streamed reasoning has not been confirmed."}</span>
+          : message.sourceRetained && message.threadId && message.turnId
+            ? <button type="button" onClick={() => onInspect({
+              threadId: message.threadId!,
+              turnId: message.turnId!,
+              itemId: message.id,
+              itemType: "agentMessage",
+              title: "Assistant response",
+            })}>Inspect saved output</button>
+            : <span>The partial output was not saved by App Server and cannot be restored.</span>}
+        {message.upstreamTruncated && <span>App Server reports an upstream omission; source bytes omitted before persistence are unavailable.</span>}
+      </div>}
+    </div>
+  </article>;
+}
+
+function ActivityCard({ activity, onInspect }: {
+  activity: ActivityEntry;
+  onInspect: (location: OutputInspectionLocation) => void;
+}) {
+  const [inlineExpanded, setInlineExpanded] = useState(false);
+  const [inlinePage, setInlinePage] = useState<OutputInspectionPage | null>(null);
+  const [inlineLoading, setInlineLoading] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const inlineRequestRef = useRef(0);
+  const onReadRange = useContext(OutputRangeReaderContext);
+  const rangeItemId = activity.outputItemId ?? activity.id;
+  const inspectable = activity.sourceRetained === true
+    && Boolean(activity.threadId && activity.turnId && activity.itemType && rangeItemId);
+  const outputLocation = inspectable ? {
+    threadId: activity.threadId!,
+    turnId: activity.turnId!,
+    itemId: rangeItemId,
+    itemType: activity.itemType!,
+    title: activity.title,
+  } : null;
+  const outputIdentity = JSON.stringify([activity.threadId, activity.turnId, rangeItemId, activity.itemType]);
+  useEffect(() => {
+    inlineRequestRef.current += 1;
+    setInlinePage(null);
+    setInlineLoading(false);
+    setInlineError(null);
+    setInlineExpanded(false);
+  }, [outputIdentity]);
+  async function loadInlineRange(offset: number, append: boolean) {
+    if (!outputLocation || !onReadRange || inlineLoading) return;
+    const requestId = ++inlineRequestRef.current;
+    setInlineLoading(true);
+    setInlineError(null);
+    try {
+      const next = await onReadRange(outputLocation, offset);
+      if (requestId !== inlineRequestRef.current) return;
+      if (next.threadId !== outputLocation.threadId || next.turnId !== outputLocation.turnId
+          || next.itemId !== outputLocation.itemId || next.offset !== offset) {
+        throw new Error("The saved output response did not match this card's exact item identity and requested range.");
+      }
+      setInlinePage((current) => append ? mergeOutputRange(current, next) : next);
+    } catch (error) {
+      if (requestId === inlineRequestRef.current) {
+        setInlineError(error instanceof Error ? error.message : "The retained output range could not be read.");
+      }
+    } finally {
+      if (requestId === inlineRequestRef.current) setInlineLoading(false);
+    }
+  }
   const exitCode = activity.exitCode !== undefined && Number.isSafeInteger(activity.exitCode) ? activity.exitCode : undefined;
   const exitCodeDescription = exitCode === undefined ? "" : `, exit code ${exitCode}`;
   const stopCommandAction = useContext(CommandStopActionContext);
@@ -1967,14 +2156,41 @@ function ActivityCard({ activity, onInspect }: { activity: ActivityEntry; onInsp
     <span className="activity-state-icon">{activity.status === "succeeded" ? <Icon name="check" size={13} /> : activity.status === "failed" ? <Icon name="alert" size={13} /> : showSpinner ? <span className="activity-spinner" /> : <Icon name="info" size={13} />}</span>
     <div className="activity-copy">
       <div className="activity-title">{activity.title}</div>
+      {activity.argumentsText !== undefined && <details className="activity-arguments">
+        <summary>Arguments</summary><pre tabIndex={0} aria-label={`${activity.title} arguments`}>{activity.argumentsText}</pre>
+      </details>}
       {activity.detail && <pre tabIndex={0} aria-label={`${activity.title} details`}>{activity.detail}</pre>}
+      {activity.errorText && activity.errorText !== activity.detail && <pre className="activity-error-detail" tabIndex={0} aria-label={`${activity.title} error`}>{activity.errorText}</pre>}
       {activity.commandStopDetail && <p className="activity-command-note" role="note">{activity.commandStopDetail}</p>}
-      {(activity.displayTruncated || activity.upstreamTruncated) && <div className="output-truncation-note" role="note"><span>{activity.displayTruncated ? `${activity.omittedCharacters ?? "Some"} characters omitted from this preview.` : "App Server indicates that source output was already truncated."}</span>{inspectable ? <button type="button" onClick={() => onInspect({ threadId: activity.threadId!, turnId: activity.turnId!, itemId: activity.id, itemType: activity.itemType!, title: activity.title })}>Inspect saved output</button> : <span>App Server did not retain a completed item for inspection.</span>}{activity.upstreamTruncated && <span>Source bytes omitted before persistence are unavailable.</span>}</div>}
+      {inspectable && <div className="activity-retained-output">
+        <button type="button" aria-expanded={inlineExpanded} onClick={() => {
+          const expand = !inlineExpanded;
+          setInlineExpanded(expand);
+          if (expand && !inlinePage && !inlineLoading) void loadInlineRange(0, false);
+        }}>{inlineExpanded ? "Hide retained output" : "Expand retained output"}</button>
+        {inlineExpanded && <div className="activity-retained-output-content">
+          {inlineLoading && <span role="status">Loading retained output…</span>}
+          {inlineError && <span role="alert" className="activity-error-detail">{inlineError}</span>}
+          {inlinePage && <>
+            <span role="status">Loaded {inlinePage.nextOffset.toLocaleString()} of {inlinePage.totalCharacters.toLocaleString()} retained characters</span>
+            <pre tabIndex={0} aria-label={`${activity.title} full retained output`} className="activity-retained-output-scroll">{inlinePage.text}</pre>
+            {inlinePage.hasMore && <button type="button" disabled={inlineLoading} onClick={() => void loadInlineRange(inlinePage.nextOffset, true)}>{inlineLoading ? "Loading next range…" : "Load more retained output"}</button>}
+            {inlinePage.upstreamTruncated && <span role="note">App Server reports source text omitted before persistence; the retained text above is all that can be recovered.</span>}
+            {inlinePage.omittedParts && <span role="note">Additional non-text parts were omitted by the saved-item reader.</span>}
+          </>}
+        </div>}
+      </div>}
+      {activity.sourceRetained !== true && (activity.displayTruncated || activity.upstreamTruncated)
+        && <div className="output-truncation-note" role="note"><span>The exact retained source item is unavailable, so the clipped text cannot be expanded.</span></div>}
+      {activity.upstreamTruncated && <div className="output-truncation-note" role="note">App Server reports source text omitted before persistence; those bytes cannot be recovered.</div>}
+      {inspectable && (activity.displayTruncated || activity.upstreamTruncated)
+        && <button type="button" className="activity-output-inspector-link" onClick={() => onInspect(outputLocation!)}>Open output inspector</button>}
       <span className="activity-attribution">{attribution}</span>
     </div>
     <div className="activity-status-group">
       <span className="activity-status-label" role="status">{stateLabel}</span>
       {exitCode !== undefined && <span className="activity-exit-code">Exit code {exitCode}</span>}
+      {activity.durationMs !== undefined && <span className="activity-exit-code">{(activity.durationMs / 1000).toFixed(2)} s</span>}
       {mayStopCommand(activity) && stopCommandAction && <button
         type="button"
         className="activity-command-stop"
@@ -2014,7 +2230,6 @@ function OutputInspectionDrawer({
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
-  const hasPrevious = Boolean(page && page.offset > 0);
   return <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} tabIndex={-1} className="diagnostics-drawer output-inspection-drawer" role="dialog" aria-modal="true" aria-labelledby="output-inspection-title" onKeyDown={(event) => handleDialogKeyDown(event, dialogRef.current, onClose)}>
       <header className="drawer-header"><div><span className="details-kicker">CODEX APP SERVER · SAVED ITEM</span><h2 id="output-inspection-title">Inspect output</h2></div><button ref={closeButtonRef} className="icon-button" aria-label="Close output inspection" onClick={onClose}><Icon name="close" size={18} /></button></header>
@@ -2023,14 +2238,15 @@ function OutputInspectionDrawer({
         {loading && <p role="status">Loading saved item range…</p>}
         {error && <p className="review-unavailable" role="alert">{error}</p>}
         {page && <>
-          <p className="output-page-position" role="status">Characters {page.offset.toLocaleString()}–{Math.max(page.offset, page.nextOffset - 1).toLocaleString()} of {page.totalCharacters.toLocaleString()}</p>
+          <p className="output-page-position" role="status">Loaded {page.nextOffset.toLocaleString()} of {page.totalCharacters.toLocaleString()} retained characters</p>
           {page ? (page.upstreamTruncated
             ? <p className="review-unavailable" role="note">App Server marks this saved tool output as truncated upstream. The retained head/tail is inspectable; bytes omitted before persistence are not available.</p>
             : <p className="review-unavailable" role="note">The saved item contains no recognized upstream omission marker. That is not proof the original output is complete: NeoBabylon can inspect only what App Server returned and cannot recover or count any text omitted before persistence.</p>) : null}
+          {page?.omittedParts && <p className="review-unavailable" role="note">Additional reasoning parts beyond the bounded range were omitted from inspection.</p>}
           <pre className="output-inspection-content" tabIndex={0} aria-label={`${location.title} saved output`}>{page.text}</pre>
         </>}
       </div>
-      <footer className="drawer-footer"><span>{page ? `${page.itemType} · ${page.totalCharacters.toLocaleString()} retained characters` : "App Server-owned history"}</span><div className="output-inspection-controls"><button type="button" className="drawer-done" disabled={!hasPrevious || loading} onClick={() => onLoadRange(Math.max(0, (page?.offset ?? 0) - 32_768))}>Previous</button><button type="button" className="drawer-done" disabled={!page?.hasMore || loading} onClick={() => onLoadRange(page?.nextOffset ?? 0)}>Next</button><button type="button" className="drawer-done" onClick={onClose}>Done</button></div></footer>
+      <footer className="drawer-footer"><span>{page ? `${page.itemType} · ${page.nextOffset.toLocaleString()} / ${page.totalCharacters.toLocaleString()} retained characters loaded` : "App Server-owned history"}</span><div className="output-inspection-controls"><button type="button" className="drawer-done" disabled={!page?.hasMore || loading} onClick={() => onLoadRange(page?.nextOffset ?? 0)}>Load more</button><button type="button" className="drawer-done" onClick={onClose}>Done</button></div></footer>
     </section>
   </div>;
 }

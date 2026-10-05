@@ -1,3 +1,6 @@
+import { upsertReasoningItem } from "./reasoning-transcript.mjs";
+import { toolActivityTitle, toolArgumentsText } from "./tool-activity.mjs";
+
 const recordValue = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 const textValue = (value) => typeof value === "string" && value.trim() ? value : undefined;
 
@@ -42,8 +45,33 @@ export function resolveLiveTurnState(resultValue) {
   const marker = createLiveTurnStatusMessage(result, "live-turn-state");
   if (marker?.outcome === "unconfirmed") return "unknown";
   if (marker?.outcome === "interrupted") return "interrupted";
-  if (marker?.outcome === "failed" || result?.eventType === "turnCompletedWithToolFailure") return "failed";
-  return "completed";
+  if (marker?.outcome === "failed") return "failed";
+  if (result?.terminal === true && result.turnStatus === "completed" && result.completed === true
+    && (result.eventType === "turnCompleted" || result.eventType === "turnCompletedWithToolFailure")) return "completed";
+  return "unknown";
+}
+
+export function resolveLiveTurnOutcome(resultValue) {
+  const result = recordValue(resultValue);
+  const state = resolveLiveTurnState(result);
+  const failure = recordValue(result?.failure);
+  const providerTurnFailure = recordValue(result?.providerTurnFailure);
+  const providerFailureMessage = textValue(providerTurnFailure?.message);
+  const toolDiagnostics = Array.isArray(result?.toolDiagnostics) ? result.toolDiagnostics : [];
+  const failedTools = toolDiagnostics.filter((value) => recordValue(value)?.succeeded === false).length;
+  const toolFailure = failure
+    ? failure.type === "toolExecution"
+      || (failure.type === undefined && result?.eventType === "turnCompletedWithToolFailure")
+    : result?.eventType === "turnCompletedWithToolFailure" || failedTools > 0;
+  const fatal = state === "failed" || Boolean(providerFailureMessage) || Boolean(failure && !toolFailure);
+  const toolCount = failedTools || 1;
+  return {
+    state,
+    fatal,
+    warning: state === "completed" && toolFailure
+      ? `The model turn completed, but ${toolCount} tool ${toolCount === 1 ? "action failed" : "actions failed"}. See the failed tool activity for its exact error and output.`
+      : null,
+  };
 }
 
 export function restoreVisibleTranscript(turns, threadId) {
@@ -80,6 +108,12 @@ export function restoreVisibleTranscript(turns, threadId) {
           ? "\n\n[Non-text attachment omitted from this preview.]"
           : "";
         if (body) restored.push({ id: itemId, role: "user", text: body + contentNote });
+      } else if (kind === "reasoning") {
+        const reasoning = upsertReasoningItem(restored, item, {
+          threadId,
+          turnId: textValue(turn?.id),
+        });
+        if (reasoning !== restored) restored.splice(0, restored.length, ...reasoning);
       }
     }
 
@@ -98,14 +132,31 @@ export function restoreSavedActivities(outputs, threadId) {
     if (!output || !id) return [];
     const display = recordValue(output.neoBabylonDisplay);
     const status = classifyActivityOutcome(output.outcome, output.error);
+    const argumentsText = toolArgumentsText(output.arguments);
+    const errorText = textValue(output.error);
     return [{
       id,
-      title: textValue(output.title) ?? textValue(output.itemType) ?? "Tool activity",
-      detail: typeof output.text === "string" ? output.text : undefined,
+      title: toolActivityTitle({
+        title: textValue(output.title),
+        command: textValue(output.command),
+        toolName: textValue(output.toolName),
+        tool: textValue(output.tool),
+        itemType: textValue(output.itemType),
+        argumentsValue: output.arguments,
+      }),
+      detail: typeof output.text === "string" ? output.text
+        : typeof output.output === "string" ? output.output
+          : typeof output.result === "string" ? output.result : undefined,
+      ...(textValue(output.command) ? { command: textValue(output.command) } : {}),
+      ...(argumentsText === undefined ? {} : { argumentsText }),
+      ...(errorText ? { errorText } : {}),
       status,
+      ...(Number.isSafeInteger(output.exitCode) ? { exitCode: output.exitCode } : {}),
+      ...(Number.isFinite(output.durationMs) && output.durationMs >= 0 ? { durationMs: output.durationMs } : {}),
       itemType: textValue(output.itemType),
+      ...(textValue(output.outputItemId) ? { outputItemId: textValue(output.outputItemId) } : {}),
       turnId: textValue(output.turnId),
-      sourceRetained: true,
+      sourceRetained: output.sourceRetained === true || Boolean(textValue(output.outputItemId)),
       ...(threadId ? { threadId } : {}),
       ...(display?.displayTruncated === true || display?.upstreamTruncated === true ? {
         displayTruncated: display.displayTruncated === true,

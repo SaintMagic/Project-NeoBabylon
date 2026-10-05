@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTaskTelemetry, reduceTaskTelemetry, contextMetrics, rateHistory, createTelemetryFramePublisher } from "../src/task-telemetry.mjs";
+import { createTaskTelemetry, reduceTaskTelemetry, contextMetrics, rateHistory, createTelemetryFramePublisher, normalizeTurnMeasurementOutcome } from "../src/task-telemetry.mjs";
 
 const identity = { workspace: "D:/fixture", threadId: "thread-a", providerId: "provider-a", modelIdentifier: "model-a" };
 const counts = (totalTokens, outputTokens) => ({ totalTokens, inputTokens: totalTokens - outputTokens, cachedInputTokens: 20, cacheWriteInputTokens: null, outputTokens, reasoningOutputTokens: 5 });
@@ -86,6 +86,91 @@ test("rates require measured completed turns and count actual output deltas, inc
   state = reduceTaskTelemetry(state, { ...snapshot(state, usage(1600, 400), { usageTurnId: "turn-2" }), finalForRequestId: "request-2" });
   assert.equal(state.turnAverage, 12);
   assert.equal(state.weightedAverage, 10);
+});
+
+test("a captured completed live turn is measurable without a race-prone follow-up snapshot", () => {
+  let state = started(begin(hydrate(), "request-1", 1000));
+  state = reduceTaskTelemetry(state, { type: "notification", nowMs: 5000, event: {
+    requestId: "request-1", method: "thread/tokenUsage/updated", params: { threadId: "thread-a", turnId: "turn-1", tokenUsage: usage(1200, 160) },
+  } });
+  assert.equal(state.turnAverage, 15);
+  state = reduceTaskTelemetry(state, { type: "complete", requestId: "request-1", threadId: "thread-a", turnId: "turn-1", outcome: "completed", nowMs: 11000 });
+  assert.equal(state.turnAverage, 6);
+  assert.equal(state.weightedAverage, 6);
+  assert.equal(state.measuredTurns, 1);
+  assert.equal(state.samples.at(-1).rate, 6);
+});
+
+test("a first turn without a cumulative baseline needs two timed observations", () => {
+  let state = started(begin(createTaskTelemetry(identity), "request-1", 1000));
+  state = reduceTaskTelemetry(state, { type: "notification", nowMs: 3000, event: {
+    requestId: "request-1", method: "thread/tokenUsage/updated", params: { threadId: "thread-a", turnId: "turn-1", tokenUsage: usage(1100, 100) },
+  } });
+  assert.equal(state.turnAverage, null);
+  state = reduceTaskTelemetry(state, { type: "notification", nowMs: 5000, event: {
+    requestId: "request-1", method: "thread/tokenUsage/updated", params: { threadId: "thread-a", turnId: "turn-1", tokenUsage: usage(1200, 160) },
+  } });
+  assert.equal(state.turnAverage, 30);
+  state = reduceTaskTelemetry(state, { type: "complete", requestId: "request-1", threadId: "thread-a", turnId: "turn-1", outcome: "completed", nowMs: 6000 });
+  assert.equal(state.measuredTurns, 1);
+  assert.equal(state.turnAverage, 20);
+});
+
+test("completed model output remains measurable when a tool failed after turn completion", () => {
+  const result = { terminal: true, turnStatus: "completed", eventType: "turnCompletedWithToolFailure" };
+  assert.equal(normalizeTurnMeasurementOutcome(result), "completed");
+  let state = started(begin(hydrate()));
+  state = reduceTaskTelemetry(state, { type: "complete", requestId: "request-1", threadId: "thread-a", turnId: "turn-1",
+    outcome: normalizeTurnMeasurementOutcome(result), nowMs: 11000 });
+  state = reduceTaskTelemetry(state, { ...snapshot(state, usage(1200, 160), {
+    usageTurnId: "turn-1", rateEvidenceVersion: 1, rateEvidenceSource: "journal v1",
+    rateMeasurements: [{ turnId: "turn-1", modelIdentifier: "model-a", providerId: "provider-a", outputTokens: 60, durationMs: 10000 }],
+  }), finalForRequestId: "request-1" });
+  assert.equal(state.measuredTurns, 1);
+  assert.equal(state.turnAverage, 6);
+});
+
+test("actual model failures and unconfirmed turns remain excluded regardless of UI workflow outcome", () => {
+  for (const result of [
+    { terminal: true, turnStatus: "failed", eventType: "turnFailure" },
+    { terminal: true, turnStatus: "interrupted", eventType: "turnInterrupted" },
+    { terminal: false, turnStatus: null, eventType: "turnFailure" },
+  ]) {
+    assert.notEqual(normalizeTurnMeasurementOutcome(result), "completed");
+  }
+  const uiWorkflowSucceeded = { terminal: true, turnStatus: "failed", eventType: "turnFailure" };
+  assert.equal(normalizeTurnMeasurementOutcome(uiWorkflowSucceeded), "failed");
+});
+
+test("versioned journal measurements restore, deduplicate repeated snapshots, and stay model-attributed", () => {
+  const first = { turnId: "restored-1", modelIdentifier: "model-a", providerId: null, outputTokens: 18376, durationMs: 281900, source: "Codex completed-turn journal v1" };
+  const second = { turnId: "restored-2", modelIdentifier: "model-a", providerId: "provider-a", outputTokens: 100, durationMs: 10000, source: "Codex completed-turn journal v1" };
+  const wrongModel = { turnId: "other-model", modelIdentifier: "model-b", providerId: "provider-a", outputTokens: 900, durationMs: 1000, source: "Codex completed-turn journal v1" };
+  let state = createTaskTelemetry(identity);
+  const restored = () => snapshot(state, usage(98471, 18376), { rateEvidenceVersion: 1, rateEvidenceSource: "Codex completed-turn journal v1", rateMeasurements: [first, second, wrongModel] });
+  state = reduceTaskTelemetry(state, restored());
+  state = reduceTaskTelemetry(state, restored());
+  assert.equal(state.turnAverage, 10);
+  assert.equal(state.weightedAverage, 18476 * 1000 / 291900);
+  assert.equal(state.measuredTurns, 2);
+  assert.equal(state.measurements.filter((measurement) => measurement.turnId === "restored-1").length, 1);
+  assert.equal(state.measurements.find((measurement) => measurement.turnId === "restored-1").providerId, null);
+  const switched = createTaskTelemetry({ ...identity, modelIdentifier: "model-b" }, { epoch: state.epoch + 1 });
+  const modelB = reduceTaskTelemetry(switched, { ...restored(), epoch: switched.epoch, revision: switched.revision });
+  assert.equal(modelB.measuredTurns, 1);
+  assert.equal(modelB.weightedAverage, 900);
+});
+
+test("out-of-order and duplicate timed notifications cannot roll back a live rate", () => {
+  let state = started(begin(hydrate(), "request-1", 1000));
+  const notify = (atMs, output) => reduceTaskTelemetry(state, { type: "notification", nowMs: atMs, event: {
+    requestId: "request-1", method: "thread/tokenUsage/updated", params: { threadId: "thread-a", turnId: "turn-1", tokenUsage: usage(1000 + output - 100, output) },
+  } });
+  state = notify(5000, 160);
+  const measured = state.turnAverage;
+  assert.strictEqual(notify(4000, 150), state);
+  assert.strictEqual(notify(6000, 160), state);
+  assert.equal(state.turnAverage, measured);
 });
 
 test("missing baseline, invalid elapsed time, unconfirmed or failed outcomes produce gaps, not synthetic zero rates", () => {

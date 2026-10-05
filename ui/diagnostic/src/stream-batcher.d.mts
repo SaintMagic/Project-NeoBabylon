@@ -1,3 +1,5 @@
+export function assistantDeltaText(value: unknown): string | undefined;
+
 export type AssistantDisplayMetadata = {
   displayTruncated?: boolean;
   omittedCharacters?: number;

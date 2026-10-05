@@ -32,12 +32,12 @@ public static class TurnDiagnostics
             }
 
             var status = StringValue(item["status"]);
-            var output = FirstString(item, "aggregatedOutput", "output", "result");
-            var error = StringValue(item["error"]);
+            var output = ToolOutputText.Read(item);
+            var error = ToolOutputText.Text(item["error"]);
             var exitCode = IntValue(item["exitCode"]);
             var succeeded = string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
                 && exitCode is null or 0
-                && string.IsNullOrWhiteSpace(error);
+                && !ToolOutputText.Failed(item);
             var summary = new JsonObject
             {
                 ["eventType"] = "toolOutcome",
@@ -45,8 +45,13 @@ public static class TurnDiagnostics
                 ["evidenceSource"] = "appServerNotification",
                 ["itemType"] = itemType,
                 ["itemId"] = StringValue(item["id"]),
+                ["outputItemId"] = StringValue(item["id"]),
+                ["sourceRetained"] = !string.IsNullOrWhiteSpace(StringValue(item["id"])),
                 ["callId"] = StringValue(item["callId"]),
+                ["threadId"] = StringValue(notification.Params["threadId"]),
+                ["turnId"] = StringValue(notification.Params["turnId"]),
                 ["status"] = status,
+                ["durationMs"] = item["durationMs"]?.DeepClone(),
                 ["outcome"] = succeeded ? "succeeded" : "failed",
                 ["succeeded"] = succeeded
             };
@@ -57,7 +62,16 @@ public static class TurnDiagnostics
             }
 
             CopyString(summary, "command", item, "command");
-            CopyString(summary, "output", item, "aggregatedOutput", "output", "result");
+            CopyString(summary, "toolName", item, "tool", "name");
+            if (item["arguments"] is JsonNode arguments)
+            {
+                summary["arguments"] = arguments.DeepClone();
+            }
+            else if (item["input"] is JsonNode input)
+            {
+                summary["arguments"] = input.DeepClone();
+            }
+            summary["output"] = output;
             if (exitCode is not null)
             {
                 summary["exitCode"] = exitCode.Value;
@@ -97,8 +111,12 @@ public static class TurnDiagnostics
                 ["evidenceSource"] = "isolatedSessionJournal",
                 ["itemType"] = "functionCallOutput",
                 ["itemId"] = call.ItemId,
+                ["outputItemId"] = call.OutputItemId,
                 ["callId"] = call.CallId,
                 ["toolName"] = call.ToolName,
+                ["arguments"] = call.Arguments,
+                ["output"] = call.Output,
+                ["sourceRetained"] = call.OutputItemId is not null,
                 ["outcome"] = outcome,
                 ["succeeded"] = outcome switch
                 {
@@ -143,13 +161,53 @@ public static class TurnDiagnostics
         {
             var itemId = StringValue(diagnostic["itemId"]);
             var callId = StringValue(diagnostic["callId"]);
-            if (itemId is not null && observedIds.Contains(itemId)
-                || callId is not null && observedIds.Contains(callId))
+            var matchingIndex = -1;
+            for (var index = 0; index < result.Count; index++)
             {
+                if (result[index] is not JsonObject notification)
+                {
+                    continue;
+                }
+
+                var notificationItemId = StringValue(notification["itemId"]);
+                var notificationCallId = StringValue(notification["callId"]);
+                if (callId is not null && (notificationCallId == callId || notificationItemId == callId)
+                    || itemId is not null && notificationItemId == itemId)
+                {
+                    matchingIndex = index;
+                    break;
+                }
+            }
+
+            if (matchingIndex < 0)
+            {
+                if (itemId is null || !observedIds.Contains(itemId))
+                {
+                    result.Add(diagnostic.DeepClone());
+                }
                 continue;
             }
 
-            result.Add(diagnostic.DeepClone());
+            var merged = (JsonObject)result[matchingIndex]!.DeepClone();
+            foreach (var field in new[] { "toolName", "arguments", "threadId", "turnId", "itemType" })
+            {
+                if (merged[field] is null && diagnostic[field] is JsonNode value)
+                {
+                    merged[field] = value.DeepClone();
+                }
+            }
+
+            if (diagnostic["outputItemId"] is JsonNode outputItemId)
+            {
+                merged["outputItemId"] = outputItemId.DeepClone();
+                merged["sourceRetained"] = true;
+            }
+            else if (merged["sourceRetained"] is null && diagnostic["sourceRetained"] is JsonNode sourceRetained)
+            {
+                merged["sourceRetained"] = sourceRetained.DeepClone();
+            }
+
+            result[matchingIndex] = merged;
         }
 
         return result;

@@ -7,9 +7,23 @@ public sealed record ThreadTranscriptProjectionResult(JsonArray Turns, bool Trun
 
 public static class ThreadTranscriptProjector
 {
+    private const int MaximumReasoningParts = 128;
     private static readonly Regex UpstreamOmissionMarker = new(
         @"\.\.\.\s+\d+\s+bytes omitted\s+\.\.\.",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static bool HasReadableText(JsonArray? parts)
+    {
+        if (parts is null) return false;
+        for (var index = 0; index < Math.Min(parts.Count, MaximumReasoningParts); index++)
+        {
+            if (parts[index] is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 0)
+            {
+                return true;
+            }
+        }
+        return parts.Count > MaximumReasoningParts;
+    }
 
     public static ThreadTranscriptProjectionResult Project(JsonArray sourceTurns, int maxCharacters)
     {
@@ -78,6 +92,73 @@ public static class ThreadTranscriptProjector
                     {
                         text = "[Non-text input omitted from this transcript preview.]";
                     }
+                }
+                else if (type == "reasoning")
+                {
+                    var contentParts = sourceItem["content"] as JsonArray;
+                    var summaryParts = sourceItem["summary"] as JsonArray;
+                    var useContent = HasReadableText(contentParts);
+                    var sourceParts = useContent ? contentParts : summaryParts;
+                    if (sourceParts is null)
+                    {
+                        continue;
+                    }
+
+                    var parts = new JsonArray();
+                    var selectedParts = new List<string>();
+                    var retainedPartCount = Math.Min(sourceParts.Count, MaximumReasoningParts);
+                    var omittedParts = sourceParts.Count > retainedPartCount;
+                    for (var index = 0; index < retainedPartCount; index++)
+                    {
+                        var part = sourceParts[index];
+                        if (part is JsonValue value && value.TryGetValue<string>(out var partText))
+                        {
+                            selectedParts.Add(partText);
+                        }
+                    }
+                    var reasoningText = string.Concat(selectedParts);
+                    if (reasoningText.Length == 0)
+                    {
+                        truncated |= omittedParts;
+                        continue;
+                    }
+                    var reasoningDisplayedLength = Math.Min(reasoningText.Length, Math.Max(0, remaining));
+                    var reasoningOmittedCharacters = reasoningText.Length - reasoningDisplayedLength;
+                    var remainingForParts = reasoningDisplayedLength;
+                    foreach (var part in selectedParts)
+                    {
+                        var displayedPart = part[..Math.Min(part.Length, remainingForParts)];
+                        parts.Add(displayedPart);
+                        remainingForParts -= displayedPart.Length;
+                    }
+                    remaining -= reasoningDisplayedLength;
+                    if (reasoningOmittedCharacters > 0 || omittedParts)
+                    {
+                        truncated = true;
+                    }
+
+                    var reasoningItem = new JsonObject
+                    {
+                        ["id"] = sourceItem["id"]?.DeepClone(),
+                        ["type"] = "reasoning",
+                        ["summary"] = useContent ? new JsonArray() : parts,
+                        ["content"] = useContent ? parts : new JsonArray()
+                    };
+                    if (reasoningOmittedCharacters > 0 || omittedParts)
+                    {
+                        reasoningItem["neoBabylonDisplay"] = new JsonObject
+                        {
+                            ["displayTruncated"] = true,
+                            ["originalCharacters"] = reasoningText.Length,
+                            ["omittedCharacters"] = reasoningOmittedCharacters,
+                            ["sourceRetained"] = true,
+                            ["upstreamTruncated"] = false,
+                            ["omittedParts"] = omittedParts
+                        };
+                    }
+                    items.Add(reasoningItem);
+                    if (truncated) break;
+                    continue;
                 }
 
                 if (string.IsNullOrEmpty(text) || type is not ("agentMessage" or "userMessage"))

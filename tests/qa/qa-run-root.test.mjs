@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdtempSync, mkdirSync, rmSync, existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, realpathSync, mkdtempSync, mkdirSync, rmSync, existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { assertQaRunsParent, newQaRun } from "./qa-run-root.mjs";
 
 test("accepts only the exact source-root Lab Runs directory", () => {
-  const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-root-"));
+  const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-root-")));
   try {
     const source = path.join(temporary, "NeoBabylon");
     const parent = path.join(source, ".local", "Lab", "Runs");
@@ -22,7 +22,7 @@ test("accepts only the exact source-root Lab Runs directory", () => {
 });
 
 test("creates one validated fresh run and its App root", () => {
-  const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-create-"));
+  const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-create-")));
   try {
     const source = path.join(temporary, "NeoBabylon");
     const parent = path.join(source, ".local", "Lab", "Runs");
@@ -40,7 +40,7 @@ test("creates one validated fresh run and its App root", () => {
 });
 
 test("rejects a missing Runs parent without creating directories", () => {
-  const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-missing-"));
+  const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-missing-")));
   try {
     const source = path.join(temporary, "NeoBabylon");
     const lab = path.join(source, ".local", "Lab");
@@ -56,7 +56,7 @@ test("rejects a missing Runs parent without creating directories", () => {
 
 test("redirected .local, Lab, or Runs cannot create an outside run", () => {
   for (const component of [".local", "Lab", "Runs"]) {
-    const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-link-"));
+    const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-link-")));
     try {
       const source = path.join(temporary, "NeoBabylon");
       const outside = path.join(temporary, "outside");
@@ -77,7 +77,7 @@ test("redirected .local, Lab, or Runs cannot create an outside run", () => {
 });
 
 test("invalid or reused IDs leave the parent and existing run unchanged", () => {
-  const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-unchanged-"));
+  const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-unchanged-")));
   try {
     const source = path.join(temporary, "NeoBabylon");
     const parent = path.join(source, ".local", "Lab", "Runs");
@@ -115,7 +115,7 @@ const nativeRunners = [
 test("native runner preflights accept exact Lab Runs and reject the old sibling", () => {
   const qaSource = path.dirname(fileURLToPath(import.meta.url));
   for (const name of nativeRunners) {
-    const temporary = mkdtempSync(path.join(os.tmpdir(), "nb-qa-runner-"));
+    const temporary = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "nb-qa-runner-")));
     try {
       const source = path.join(temporary, "NeoBabylon");
       const qaDir = path.join(source, "tests", "qa");

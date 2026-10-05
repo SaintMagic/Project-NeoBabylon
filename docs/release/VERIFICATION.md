@@ -1,5 +1,156 @@
 # NeoBabylon verification record
 
+## Latest source-publication review — 2026-10-05
+
+Martin requested committing and pushing the latest update to the existing
+public GitHub repository. Current session metadata verified `gpt-6.1-sol`.
+The final review covers the supplied parity patches and subsequent bounded
+conversation, reasoning, tool-output, throughput and turn-status corrections.
+Private application data, credentials, session journals, build output, the
+nested runtime checkout and reference cache remain excluded. No runtime source
+or locked-runtime identity changed; the local App Server SHA-256 was rechecked
+as `a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386`.
+
+Fresh checks passed: **194 UI tests**, UI TypeScript and bundle build, **6 QA
+run-root tests**, **12 focused C# parity checks**, the focused actual-journal
+rate/identity checks, and isolated WPF Host Release and ApprovalQA harness
+compilation with zero warnings/errors. The running user application was not
+restarted; the previously recorded deterministic native evidence was not
+rerun, and no live provider inference was requested.
+
+The broad ApprovalQA host harness is **not green**. Before the test-contract
+correction, current source returned 110 passes / 27 failures. The published
+`f126612` baseline, built separately and executed from the same checkout CWD
+with the same test environment, returned 109 passes / 26 failures. All 26
+baseline failure names also occurred in the current run; this comparison does
+not diagnose their causes or prove identical behavior. The extra current
+failure was an obsolete assertion forbidding ordinary tool output, contrary
+to accepted [NB-DEC-011](../decisions/0011-unrestricted-tool-output-visibility.md).
+Only that test contract was corrected to require exact normal output,
+arguments and retained output identity while keeping missing output Unknown.
+The new focused regression passed, and the updated broad harness compiled;
+the entire broad harness was not rerun after this test-only correction.
+These are source-publication checks, not full-suite, live-provider, phase or
+product-release acceptance. Private artifacts remain under
+`.local/Lab/Runs/Push-20261005/`.
+
+## Completed turns versus failed tools — 2026-10-04
+
+Martin authorized correcting the misleading whole-turn failure state. The
+saved missing-out.log command exited 1, but the same model turn continued and
+finished normally. NeoBabylon had incorrectly classified the host's
+`turnCompletedWithToolFailure` as failed generation and marked the assistant
+answer failed. The UI now separates verified turn completion from individual
+tool outcomes. A completed turn remains completed with a nonfatal warning;
+failed tool cards retain their error/output, exit code and exact identity.
+Actual provider/runtime failure, interruption and unconfirmed outcomes remain
+distinct. A successful fork clears the source thread's live warning only after
+identity validation; a failed fork leaves the source state intact.
+
+Fresh final checks: **194 UI tests passed**, TypeScript passed, and the UI bundle
+build passed. The existing WPF Host serves the rebuilt assets; host and runtime
+source/binaries were not changed by this slice. The pinned App Server/native
+WebView2 deterministic fixture passed: an actual command exited **23**, its
+failed result reached the same model's single continuation, the model turn
+completed, the nonfatal warning was visible, no fatal banner or failed answer
+marker appeared, and there were exactly two loopback Responses requests with
+no retry/fallback or page errors. The extended fixture then verified a distinct
+forked thread, cleared warning and still only two requests. This is mock-path
+evidence, not live inference/provider qualification. Two earlier fixture runs
+failed on obsolete CSS-class selectors (duration shares exit-code styling);
+their receipts are retained and the corrected semantic selector passed.
+
+Scoped review and fork-reset re-review found no remaining defect in the final
+fix. The turn-level warning summary is **live-only**; restored history still
+shows authoritative completed state and failed individual tool cards. No new
+durable warning/history API was introduced. A separate read-only trace found
+the malformed spacing already in Codex's persisted AgentMessage before NB
+rendering; provider versus Codex-internal origin remains Unknown. Existing
+whitespace regressions passed; no saved answer was rewritten.
+
+Final normal host PID 67948 was responsive at 18:55:51 UTC, with the preserved
+popup-QA app/Data root and pinned App Server child PID 80076. Debugging was
+disabled; old diagnostic port 60988 was not listening. Runtime SHA-256 remained
+`a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386`.
+No live inference, credential/configuration change, data reset, commit or push.
+The previous full-host-harness and broader phase/product verification gaps are
+not closed by this correction. Private exact paths and receipts:
+`.local/Lab/Runs/Turn-Status-20261004/final-handoff.md` and the final native run
+`.local/Lab/Runs/P3-02-native-command-failure-1791139974960-97908/result.json`.
+
+## Throughput and retained tool output — 2026-10-04
+
+Martin requested useful throughput/average values, meaningful tool cards and
+scrollable retained output without silently discarded characters. The bounded
+fix is implemented and uncommitted. Exact completed-turn journal evidence now
+restores measured output rates; live measurements use monotonic elapsed time.
+These are end-to-end rates, including waits/tools, not provider decode TPS.
+Failed/interrupted/unconfirmed turns are excluded from the completed-turn
+average. Missing provider provenance is not invented.
+
+The controller's final native saved-chat check showed **18.9 tok/s** for both
+Throughput and the one-turn, time-weighted selected-model average: 22,110 output
+tokens over 1,169,440 ms. An earlier provisional 65.2 tok/s example was
+withdrawn: that later turn actually failed with OpenRouter `openrouter:web_search`
+upstream 502. Its terminal error is now captured separately from tool outcomes;
+the restored UI did not display that specific cause in the native probe.
+
+All 64 restored tool cards had meaningful command titles and inline retained
+output controls. A representative card loaded all **4,726/4,726 retained
+characters**, scrollable and keyboard-focusable. Exact host-returned output
+identity and contiguous page offsets are checked. Post-turn merging preserves
+arguments and retained output identity. Source-side truncation cannot be undone;
+the existing newest-64 saved-card limit remains disclosed, not removed.
+
+Final checks: **193 UI tests passed**; TypeScript and UI bundle builds passed;
+the actual WPF Host Release build passed with zero warnings/errors; focused C#
+fixtures included the actual journal and rejected mismatched thread identity.
+Native WebView2 checks passed at desktop and 800x812, with no page errors,
+framework overlay or horizontal overflow. Independent scoped re-reviews passed.
+The earlier full-host-harness failures remain unclassified; this is not a full
+suite, live-provider qualification or phase/product acceptance claim.
+
+The exact idle diagnostic host closed gracefully. Normal host PID 82796 was
+responsive at 17:43:10 UTC with the same popup-QA application Data root and
+locked App Server child PID 95612. Temporary debugging port 60988 was no longer
+listening. Runtime SHA-256 remained
+`a0c3ebdc8d1d9f5b56327f5ea6d1502ee5a0b50fa174d50743f8c7a17ff54386`.
+No inference, runtime edit, configuration reset, commit or push was performed.
+Two read-only OpenRouter generation lookups returned zero native token counts
+despite nonzero exact Codex counts; provider-native TPS remains unqualified and
+is not substituted for the measured end-to-end rate. Private receipt and exact
+task-owned paths: `.local/Lab/Runs/Throughput-20261004/final-handoff.md`;
+tool evidence: `.local/Lab/Runs/Tool-Output-20261004/`.
+
+## User bubbles and readable reasoning labels — 2026-10-04
+
+Martin requested rounded user-message bubbles and clear Reasoning/Message
+labels. The bounded display change is implemented, uncommitted: neutral gray
+right-aligned user bubbles; flat assistant Message entries; explicit Reasoning
+or Reasoning summary entries only from readable App Server reasoning data.
+Live/restored identity, preview bounds, omission notices and the existing
+saved-item range inspector are covered by focused regressions. The pinned
+Codex runtime and provider settings were not modified.
+
+The implementer reported 182 passing UI tests and 24/24 focused UI checks;
+the focused C# reasoning range check passed. UI typecheck/bundle passed.
+The controller built the actual WPF Host in isolated Release output with
+zero warnings/errors. Synthetic renders passed at 1440x900 and 800x812,
+including 10.19:1 dark bubble contrast. Independent task review found no
+blocking issue. Native inspection of the rebuilt Host restored the existing
+chat with 3 user bubbles, 65 readable reasoning sections and 72 Message
+sections; at 1464x901 it showed matching gray colors, no framework overlay and
+zero horizontal overflow. The same application Data root was preserved.
+Temporary diagnostic remote debugging was closed before the final normal
+launch; no live provider inference was requested by this task.
+
+The full host harness is **not green**: 15 failures remain unclassified without
+a comparable baseline run. This entry does not pass that suite, qualify a live
+provider, close broader parity specifications, or close a product/phase gate.
+Private task evidence and exact changed paths:
+`.local/Lab/Runs/Message-Pills-20261004/task-report.md`, `task-review.md`, and
+`progress.md`. Prior evidence and deferred scope remain unchanged.
+
 ## Source-publication and preserved-root restart — 2026-10-04
 
 Current session metadata verified `gpt-6.1-sol`. The authenticated GitHub

@@ -1,7 +1,5 @@
 import { projectDisplayText } from "./transcript.mjs";
 
-export const MAX_ACTIVITY_ENTRIES = 64;
-export const MAX_ACTIVITY_TEXT_CHARACTERS = 250_000;
 const MAX_ACTIVITY_TITLE_CHARACTERS = 1_200;
 const MAX_ACTIVITY_DETAIL_CHARACTERS = 40_000;
 
@@ -33,17 +31,6 @@ export function boundActivityHistory(current) {
       } : {}),
     };
   });
-
-  let totalCharacters = entries.reduce(
-    (total, activity) => total + activity.title.length + (activity.detail?.length ?? 0),
-    0,
-  );
-  while (entries.length > MAX_ACTIVITY_ENTRIES
-    || (totalCharacters > MAX_ACTIVITY_TEXT_CHARACTERS && entries.length > 1)) {
-    const removed = entries.shift();
-    totalCharacters -= removed.title.length + (removed.detail?.length ?? 0);
-    truncated = true;
-  }
 
   return { entries, truncated };
 }

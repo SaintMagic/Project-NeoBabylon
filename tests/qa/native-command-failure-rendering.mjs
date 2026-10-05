@@ -230,12 +230,16 @@ function installBridgeCapture() {
   window.__p302FailureCaptureInstalled = true;
   window.__p302FailureEvents = [];
   window.__p302FailureStartTurnResults = [];
+  window.__p302FailureForkResults = [];
   window.chrome.webview.addEventListener("message", ({ data }) => {
     if (data?.attributedTo === "Codex App Server" && typeof data.method === "string") {
       window.__p302FailureEvents.push({ method: data.method, params: data.params });
     }
     if (!data?.stream && data?.ok === true && Array.isArray(data.result?.toolDiagnostics)) {
       window.__p302FailureStartTurnResults.push(data.result);
+    }
+    if (!data?.stream && data?.ok === true && typeof data.result?.forkedFromThreadId === "string") {
+      window.__p302FailureForkResults.push(data.result);
     }
   });
 }
@@ -378,7 +382,15 @@ try {
   await page.getByRole("region", { name: "Conversation" }).locator("article.message-assistant .message-text")
     .getByText(assistantReply, { exact: true }).waitFor({ timeout: 30000 });
   await page.waitForFunction(() =>
-    document.querySelector("section.conversation")?.getAttribute("data-turn-state") === "failed", null, { timeout: 30000 });
+    document.querySelector("section.conversation")?.getAttribute("data-turn-state") === "completed", null, { timeout: 30000 });
+  const toolWarning = page.locator(".tool-warning[role='status']");
+  await toolWarning.waitFor({ timeout: 30000 });
+  assert.match(await toolWarning.innerText(), /model turn completed, but 1 tool action failed/i,
+    "the completed model turn did not show a nonfatal summary for its failed tool");
+  assert.equal(await page.locator(".transcript .turn-error[role='alert']").count(), 0,
+    "a completed model turn with only a tool failure showed a fatal turn alert");
+  assert.equal(await page.locator("article.message-assistant.message-failed").count(), 0,
+    "a completed assistant answer was marked failed because of a tool exit code");
 
   const turnResults = await page.evaluate(() => window.__p302FailureStartTurnResults ?? []);
   const finalToolDiagnostic = turnResults.flatMap((result) => result.toolDiagnostics ?? [])
@@ -387,8 +399,8 @@ try {
   assert.equal(finalToolDiagnostic.exitCode, 23, "native final tool diagnostic dropped the exact command exit code");
   assert.equal(finalToolDiagnostic.succeeded, false, "native final tool diagnostic did not retain the failed outcome");
   assert.equal(finalToolDiagnostic.attributedTo, "Codex App Server", "native final tool diagnostic lost its App Server attribution");
-  const exitCodeLabel = failedActivity.locator(".activity-exit-code");
-  assert.equal(await exitCodeLabel.count(), 1, "the native failure card omitted a visible exit-code label");
+  const exitCodeLabel = failedActivity.locator(".activity-exit-code").filter({ hasText: /^Exit code\b/ });
+  assert.equal(await exitCodeLabel.count(), 1, "the native failure card omitted its single semantic exit-code label");
   assert.equal((await exitCodeLabel.innerText()).trim(), "Exit code 23");
   assert.match(await failedActivity.getAttribute("aria-label"), /exit code 23/i,
     "the accessible activity label omitted the exact exit code");
@@ -404,6 +416,22 @@ try {
   assert.equal(completedItem.params.turnId, started.params.turn.id, "failure event changed turn identity");
   assert.deepEqual(pageIssues, [], "native WebView reported page or console errors");
   await page.screenshot({ path: screenshotPath });
+
+  await page.getByRole("button", { name: "Fork conversation" }).click();
+  await page.getByText("Conversation forked", { exact: true }).waitFor({ timeout: 30000 });
+  await page.waitForFunction(() => document.querySelectorAll(".tool-warning").length === 0, null, { timeout: 30000 });
+  const forkResults = await page.evaluate(() => window.__p302FailureForkResults ?? []);
+  assert.equal(forkResults.length, 1, "Fork conversation did not return exactly one confirmed fork result");
+  const forkResult = forkResults[0];
+  assert.equal(forkResult.forkedFromThreadId, started.params.threadId,
+    "the fork result was not attributed to the source conversation");
+  assert.ok(typeof forkResult.threadId === "string" && forkResult.threadId !== started.params.threadId,
+    "Fork conversation did not return a distinct thread identity");
+  assert.equal(await page.locator(".execution-section .mono-id").innerText(), `${forkResult.threadId.slice(0, 18)}…`,
+    "task details did not switch to the forked thread identity");
+  assert.equal(await page.locator(".tool-warning").count(), 0,
+    "the source conversation's tool warning remained visible after a successful fork");
+  assert.equal(providerRequests.length, 2, "forking triggered an extra provider request or inference");
 
   const result = {
     passed: true,
@@ -424,7 +452,13 @@ try {
     syntheticCanaryVisibleInRenderer: true,
     visibleStatus: "failed",
     visibleAttribution: "Codex App Server",
-    terminalTurnState: "failed",
+    terminalTurnState: "completed",
+    toolWarningVisible: true,
+    fatalTurnErrorVisible: false,
+    assistantReplyMarkedFailed: false,
+    forkSourceThreadId: forkResult.forkedFromThreadId,
+    forkedThreadId: forkResult.threadId,
+    toolWarningClearedAfterFork: true,
     keyboardSubmission: "Enter",
     threadId: started.params.threadId,
     turnId: started.params.turn.id,

@@ -66,6 +66,32 @@ test("restored truncated assistant items retain exact inspection identity and om
   }]);
 });
 
+test("restores only readable reasoning content or an explicitly labeled summary", () => {
+  const restored = restoreVisibleTranscript([{
+    id: "turn-reasoning",
+    items: [
+      { id: "reasoning-content", type: "reasoning", summary: ["summary ignored"], content: [" first\n", "second "] },
+      { id: "reasoning-summary", type: "reasoning", summary: [" brief", " summary "], content: [] },
+      { id: "reasoning-opaque", type: "reasoning", summary: [], content: [], encryptedContent: "ciphertext" },
+      { id: "reasoning-omitted", type: "reasoning", summary: [], content: [],
+        neoBabylonDisplay: { displayTruncated: true, omittedCharacters: 0, omittedParts: true, sourceRetained: true } },
+      { id: "agent-commentary", type: "agentMessage", text: "not reasoning" },
+    ],
+  }], "thread-reasoning");
+
+  assert.deepEqual(restored, [
+    { id: "reasoning-content", role: "reasoning", text: " first\nsecond ", reasoningLabel: "Reasoning",
+      threadId: "thread-reasoning", turnId: "turn-reasoning", streaming: false },
+    { id: "reasoning-summary", role: "reasoning", text: " brief summary ", reasoningLabel: "Reasoning summary",
+      threadId: "thread-reasoning", turnId: "turn-reasoning", streaming: false },
+    { id: "reasoning-omitted-thread-reasoning-turn-reasoning-reasoning-omitted", role: "status",
+      text: "Additional reasoning parts were omitted from this preview.", reasoningOmission: true,
+      threadId: "thread-reasoning", turnId: "turn-reasoning", itemId: "reasoning-omitted",
+      displayTruncated: true, omittedCharacters: 0, sourceRetained: true, omittedParts: true },
+    { id: "agent-commentary", role: "assistant", text: "not reasoning", threadId: "thread-reasoning", turnId: "turn-reasoning" },
+  ]);
+});
+
 test("restores saved tool output with exact item identity, attribution, and source omission status", () => {
   assert.deepEqual(restoreSavedActivities([{
     itemId: "tool-large",
@@ -133,6 +159,82 @@ test("live transport loss stays unconfirmed until App Server reports a terminal 
     { eventType: "turnFailure", terminal: true, turnStatus: "failed" }), "failed");
   assert.equal(restoration.resolveLiveTurnState(
     { eventType: "turnInterrupted", terminal: true, turnStatus: "interrupted" }), "interrupted");
+});
+
+test("completed turns with tool warnings stay completed while real failures and uncertain outcomes remain distinct", () => {
+  const missingOutput = {
+    eventType: "turnCompletedWithToolFailure",
+    terminal: true,
+    turnStatus: "completed",
+    completed: true,
+    failure: {
+      type: "toolExecution",
+      attributedTo: "Codex App Server",
+      message: "Command exited with code 1.",
+    },
+    toolDiagnostics: [{
+      itemId: "f15a0939-41e0-47fb-803e-c69c339f1b35",
+      toolName: "shell",
+      command: "Get-Content out.log",
+      output: "Get-Content: Cannot find path 'out.log'.",
+      failure: { message: "Command exited with code 1." },
+      succeeded: false,
+      exitCode: 1,
+    }],
+  };
+
+  assert.deepEqual(restoration.resolveLiveTurnOutcome(missingOutput), {
+    state: "completed",
+    fatal: false,
+    warning: "The model turn completed, but 1 tool action failed. See the failed tool activity for its exact error and output.",
+  });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnCompleted", terminal: true, turnStatus: "completed", completed: true,
+  }), { state: "completed", fatal: false, warning: null });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnFailure", terminal: true, turnStatus: "failed", completed: false,
+    failure: { type: "providerFailure", message: "The provider rejected the request." },
+    providerTurnFailure: { attributedTo: "provider", message: "Request rejected." },
+    toolDiagnostics: [{ succeeded: false, failure: { message: "An earlier tool failed." } }],
+  }), { state: "failed", fatal: true, warning: null });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnFailure", terminal: true, turnStatus: "failed", completed: false,
+    failure: { type: "toolExecution", message: "An earlier tool failed." },
+  }), { state: "failed", fatal: true, warning: null });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnInterrupted", terminal: true, turnStatus: "interrupted", completed: false,
+  }), { state: "interrupted", fatal: false, warning: null });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnFailure", terminal: false, turnStatus: null, completed: false,
+  }), { state: "unknown", fatal: false, warning: null });
+  assert.deepEqual(restoration.resolveLiveTurnOutcome({
+    eventType: "turnCompleted", terminal: true, turnStatus: "completed", completed: false,
+  }), { state: "unknown", fatal: false, warning: null });
+
+  assert.deepEqual(restoration.restoreTurnOutcome([{ status: "completed", items: missingOutput.toolDiagnostics }]), {
+    state: "completed", warning: null,
+  });
+  assert.deepEqual(restoration.restoreSavedActivities([{
+    itemId: "f15a0939-41e0-47fb-803e-c69c339f1b35",
+    itemType: "commandExecution",
+    title: "Get-Content out.log",
+    command: "Get-Content out.log",
+    text: "Get-Content: Cannot find path 'out.log'.",
+    error: "Command exited with code 1.",
+    outcome: "failed",
+    exitCode: 1,
+  }]), [{
+    id: "f15a0939-41e0-47fb-803e-c69c339f1b35",
+    title: "Get-Content out.log",
+    detail: "Get-Content: Cannot find path 'out.log'.",
+    command: "Get-Content out.log",
+    errorText: "Command exited with code 1.",
+    status: "failed",
+    exitCode: 1,
+    itemType: "commandExecution",
+    turnId: undefined,
+    sourceRetained: false,
+  }]);
 });
 
 test("restored task reports the latest saved turn outcome without replaying it", () => {

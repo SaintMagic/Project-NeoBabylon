@@ -51,7 +51,7 @@ public static class ThreadSavedOutputProjector
                     break;
                 }
 
-                var outputText = FirstString(item, "error", "aggregatedOutput", "output", "result");
+                var outputText = ToolOutputText.Read(item);
                 var displayedLength = Math.Min(outputText?.Length ?? 0,
                     Math.Min(AppServerNotificationProjection.ToolOutputDisplayLimit, remaining));
                 var omittedCharacters = (outputText?.Length ?? 0) - displayedLength;
@@ -60,19 +60,26 @@ public static class ThreadSavedOutputProjector
                 var itemId = StringValue(item["id"]);
                 var rawStatus = StringValue(item["status"]);
                 var succeeded = string.Equals(rawStatus, "completed", StringComparison.OrdinalIgnoreCase)
-                    && item["error"] is null;
+                    && !ToolOutputText.Failed(item);
 
                 var projected = new JsonObject
                 {
                     ["itemId"] = itemId,
+                    ["outputItemId"] = itemId,
                     ["turnId"] = turnId,
                     ["itemType"] = itemType,
                     ["status"] = rawStatus,
-                    ["outcome"] = string.Equals(rawStatus, "failed", StringComparison.OrdinalIgnoreCase)
+                    ["outcome"] = ToolOutputText.Failed(item)
                         ? "failed"
                         : succeeded ? "succeeded" : "unknown",
                     ["title"] = Clip(FirstString(item, "command", "tool") ?? itemType, MaximumTitleCharacters),
-                    ["text"] = displayText
+                    ["text"] = displayText,
+                    ["command"] = item["command"]?.DeepClone(),
+                    ["tool"] = item["tool"]?.DeepClone(),
+                    ["toolName"] = item["toolName"]?.DeepClone(),
+                    ["arguments"] = item["arguments"]?.DeepClone() ?? item["input"]?.DeepClone(),
+                    ["exitCode"] = item["exitCode"]?.DeepClone(),
+                    ["durationMs"] = item["durationMs"]?.DeepClone()
                 };
                 if (omittedCharacters > 0)
                 {

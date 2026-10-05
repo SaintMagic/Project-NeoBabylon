@@ -18,6 +18,11 @@ export function restoreSavedActivities(outputs: unknown, threadId?: string): {
 export function createTurnStatusMessage(status: unknown, id: string, attribution?: string): ChatMessage | null;
 export function createLiveTurnStatusMessage(result: unknown, id: string): ChatMessage | null;
 export function resolveLiveTurnState(result: unknown): "completed" | "interrupted" | "failed" | "unknown";
+export function resolveLiveTurnOutcome(result: unknown): {
+  state: "completed" | "interrupted" | "failed" | "unknown";
+  fatal: boolean;
+  warning: string | null;
+};
 export function restoreTurnOutcome(turns: unknown): {
   state: "idle" | "completed" | "interrupted" | "failed" | "unknown";
   warning: string | null;

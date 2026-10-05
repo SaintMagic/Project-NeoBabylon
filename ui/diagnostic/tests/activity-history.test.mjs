@@ -14,24 +14,24 @@ const retainedCharacters = (entries) => entries.reduce(
   0,
 );
 
-test("activity history retains only the newest entries and reports omitted history", () => {
+test("activity history retains every tool invocation card", () => {
   const result = boundActivityHistory(Array.from({ length: 70 }, (_, index) => activity(`item-${index}`)));
 
-  assert.equal(result.entries.length, 64);
-  assert.equal(result.entries[0].id, "item-6");
+  assert.equal(result.entries.length, 70);
+  assert.equal(result.entries[0].id, "item-0");
   assert.equal(result.entries.at(-1).id, "item-69");
-  assert.equal(result.truncated, true);
+  assert.equal(result.truncated, false);
 });
 
-test("aggregate detail is bounded while the newest activity remains visible", () => {
+test("each activity detail has an explicit bounded preview without dropping its card", () => {
   const result = boundActivityHistory(Array.from(
     { length: 10 },
-    (_, index) => activity(`large-${index}`, "x".repeat(40_000)),
+    (_, index) => activity(`large-${index}`, "x".repeat(50_000)),
   ));
 
-  assert.ok(result.entries.length < 10);
+  assert.equal(result.entries.length, 10);
   assert.equal(result.entries.at(-1).id, "large-9");
-  assert.ok(retainedCharacters(result.entries) <= 250_000);
+  assert.equal(retainedCharacters(result.entries), 10 * ("Tool large-0".length + 40_000));
   assert.equal(result.truncated, true);
 });
 

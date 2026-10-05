@@ -13,7 +13,8 @@ public sealed record ThreadItemOutputRange(
     string Text,
     int NextOffset,
     bool HasMore,
-    bool UpstreamTruncated);
+    bool UpstreamTruncated,
+    bool OmittedParts);
 
 public static class ThreadItemOutputRangeProjector
 {
@@ -84,8 +85,9 @@ public static class ThreadItemOutputRangeProjector
 
             var itemType = StringValue(item["type"])
                 ?? throw new InvalidDataException("The requested App Server item has no type.");
-            var text = OutputText(itemType, item)
+            var output = OutputText(itemType, item)
                 ?? throw new InvalidDataException("The requested App Server item does not contain inspectable text output.");
+            var text = output.Text;
             var start = Math.Min(offset, text.Length);
             var length = Math.Min(maximumCharacters, text.Length - start);
             var page = text.Substring(start, length);
@@ -100,28 +102,75 @@ public static class ThreadItemOutputRangeProjector
                 page,
                 nextOffset,
                 nextOffset < text.Length,
-                UpstreamOmissionMarker.IsMatch(text));
+                UpstreamOmissionMarker.IsMatch(text),
+                output.OmittedParts);
         }
 
         return null;
     }
 
-    private static string? OutputText(string itemType, JsonObject item)
+    private static OutputTextResult? OutputText(string itemType, JsonObject item)
     {
         if (itemType == "agentMessage")
         {
-            return StringValue(item["text"]);
+            var text = StringValue(item["text"]);
+            return text is null ? null : new OutputTextResult(text, false);
+        }
+
+        if (itemType == "reasoning")
+        {
+            const int maximumParts = 128;
+            var content = item["content"] as JsonArray;
+            var summary = item["summary"] as JsonArray;
+            var useContent = HasReadableText(content, maximumParts);
+            var selected = useContent ? content : summary;
+            if (selected is null)
+            {
+                return null;
+            }
+
+            var parts = new List<string>(Math.Min(selected.Count, maximumParts));
+            for (var index = 0; index < Math.Min(selected.Count, maximumParts); index++)
+            {
+                if (StringValue(selected[index]) is { } part)
+                {
+                    parts.Add(part);
+                }
+            }
+
+            var text = string.Concat(parts);
+            var omittedParts = selected.Count > maximumParts;
+            return text.Length == 0 && !omittedParts ? null : new OutputTextResult(text, omittedParts);
         }
 
         if (itemType is "commandExecution" or "fileChange" or "mcpToolCall" or "dynamicToolCall" or "functionCallOutput")
         {
-            return StringValue(item["aggregatedOutput"])
-                ?? StringValue(item["output"])
-                ?? StringValue(item["result"]);
+            var text = ToolOutputText.Read(item);
+            return text is null ? null : new OutputTextResult(text, false);
         }
 
         return null;
     }
+
+    private static bool HasReadableText(JsonArray? parts, int maximumParts)
+    {
+        if (parts is null)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < Math.Min(parts.Count, maximumParts); index++)
+        {
+            if (StringValue(parts[index]) is { Length: > 0 })
+            {
+                return true;
+            }
+        }
+
+        return parts.Count > maximumParts;
+    }
+
+    private sealed record OutputTextResult(string Text, bool OmittedParts);
 
     private static string? StringValue(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;

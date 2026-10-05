@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestHost, type HostNotification } from "./bridge";
-import { createTaskTelemetry, createTelemetryFramePublisher, reduceTaskTelemetry, telemetryIdentityKey, type TaskTelemetry, type TelemetryAction, type TelemetryIdentity } from "./task-telemetry.mjs";
+import { createTaskTelemetry, createTelemetryFramePublisher, normalizeTurnMeasurementOutcome, reduceTaskTelemetry, telemetryIdentityKey, type TaskTelemetry, type TelemetryAction, type TelemetryIdentity } from "./task-telemetry.mjs";
 
 const read = (record: Record<string, unknown>, name: string) => Object.hasOwn(record, name) ? record[name] : record[`${name[0].toUpperCase()}${name.slice(1)}`];
 
@@ -56,12 +56,12 @@ export function useTaskTelemetry(identity: TelemetryIdentity) {
     requestGeneration.current++;
     update({ type: "begin", requestId, nowMs: performance.now() });
   }, [reset, update]);
-  const notification = useCallback((event: HostNotification) => update({ type: "notification", event }), [update]);
-  const complete = useCallback((requestId: string, result: Record<string, unknown>, outcome: string) => {
+  const notification = useCallback((event: HostNotification) => update({ type: "notification", event, nowMs: performance.now() }), [update]);
+  const complete = useCallback((requestId: string, result: Record<string, unknown>, _workflowOutcome: string) => {
     const threadId = read(result, "threadId");
     const turnId = read(result, "turnId");
     update({ type: "complete", requestId, threadId: typeof threadId === "string" ? threadId : null,
-      turnId: typeof turnId === "string" ? turnId : null, outcome, nowMs: performance.now() });
+      turnId: typeof turnId === "string" ? turnId : null, outcome: normalizeTurnMeasurementOutcome(result), nowMs: performance.now() });
     // A malformed final identity cannot leave an old measured turn accepting later events.
     if (store.current.activeTurn?.requestId === requestId) update({ type: "abandon", requestId, nowMs: performance.now() });
     void refresh(requestId);

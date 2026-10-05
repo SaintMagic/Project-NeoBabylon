@@ -6,6 +6,13 @@ const TRANSCRIPT_NOTICE_TEXT_RESERVE = 512;
 const MAX_TRANSCRIPT_ENTRY_TEXT_CHARACTERS = MAX_TRANSCRIPT_TEXT_CHARACTERS - TRANSCRIPT_NOTICE_TEXT_RESERVE;
 const TRANSCRIPT_WINDOW_NOTICE_ID = "neobabylon-local-transcript-window";
 
+export function transcriptMessageKey(message) {
+  const itemId = message.reasoningOmission === true && typeof message.itemId === "string"
+    ? message.itemId
+    : message.id;
+  return JSON.stringify([message.role, message.threadId ?? "", message.turnId ?? "", itemId]);
+}
+
 export function boundTranscript(current) {
   const previousNotice = current.find((message) => message.transcriptWindowOmission);
   let omittedEntries = previousNotice?.transcriptWindowOmission?.omittedEntries ?? 0;
@@ -88,7 +95,7 @@ export function appendAssistantDelta(current, id, delta, displayMetadata) {
 export function finishAssistantStreams(current) {
   let changed = false;
   const next = current.map((message) => {
-    if (message.role !== "assistant" || message.streaming !== true) return message;
+    if ((message.role !== "assistant" && message.role !== "reasoning") || message.streaming !== true) return message;
     changed = true;
     return { ...message, streaming: false };
   });
@@ -112,7 +119,19 @@ export function markAssistantTurnFailed(current, userMessageId, turnId, threadId
 }
 
 export function upsertAssistantMessage(current, text, streaming, failed = false, id, displayMetadata, turnId, threadId) {
-  const targetId = id ?? current.findLast((message) => message.role === "assistant" && message.streaming)?.id ?? "assistant-current";
+  // A provider item id is authoritative. Text equality is only a fallback for
+  // the host's id-less final summary, and only inside the current user turn.
+  const userIndex = current.findLastIndex((message) => message.role === "user");
+  const sameTurn = (message) => message.role === "assistant"
+    && (!turnId || !message.turnId || message.turnId === turnId)
+    && (!threadId || !message.threadId || message.threadId === threadId);
+  const tail = current.slice(userIndex + 1);
+  const last = tail.at(-1);
+  const fallback = id === undefined
+    ? tail.findLast((message) => sameTurn(message) && message.streaming)
+      ?? (last && sameTurn(last) && last.text.trim() === text.trim() ? last : undefined)
+    : undefined;
+  const targetId = id ?? fallback?.id ?? `assistant-fallback-${crypto.randomUUID()}`;
   const index = current.findIndex((message) => message.id === targetId && message.role === "assistant");
   const next = {
     id: targetId,
@@ -125,10 +144,5 @@ export function upsertAssistantMessage(current, text, streaming, failed = false,
   };
   if (index >= 0) return current.map((message, itemIndex) => itemIndex === index ? next : message);
 
-  const lastIndex = current.length - 1;
-  const last = current[lastIndex];
-  if (last?.role === "assistant" && last.text.trim() === text.trim()) {
-    return current.map((message, itemIndex) => itemIndex === lastIndex ? { ...next, id: last.id } : message);
-  }
   return [...current, next];
 }

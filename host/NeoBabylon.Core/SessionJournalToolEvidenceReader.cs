@@ -4,7 +4,11 @@ using System.Text.Json.Nodes;
 
 namespace NeoBabylon.Core;
 
-public sealed record SessionJournalToolCall(string? ItemId, string CallId, string ToolName, string? Output);
+public sealed record SessionJournalToolCall(string? ItemId, string CallId, string ToolName, string? Output)
+{
+    public string? Arguments { get; init; }
+    public string? OutputItemId { get; init; }
+}
 
 public sealed record SessionJournalToolReadResult(
     IReadOnlyList<SessionJournalToolCall> Calls,
@@ -12,6 +16,8 @@ public sealed record SessionJournalToolReadResult(
     string? Failure)
 {
     public int? ModelContextWindow { get; init; }
+    public string? TaskCompleteErrorMessage { get; init; }
+    public JsonNode? TaskCompleteError { get; init; }
 }
 
 public static class SessionJournalToolEvidenceReader
@@ -81,8 +87,10 @@ public static class SessionJournalToolEvidenceReader
             stream.Position = startOffset.Value;
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
             var calls = new Dictionary<string, MutableCall>(StringComparer.Ordinal);
-            var outputsBeforeCalls = new Dictionary<string, string>(StringComparer.Ordinal);
+            var outputsBeforeCalls = new Dictionary<string, JournalOutput>(StringComparer.Ordinal);
             int? modelContextWindow = null;
+            JsonNode? taskCompleteError = null;
+            string? taskCompleteErrorMessage = null;
             var malformedRecord = false;
             string? line;
             while ((line = reader.ReadLine()) is not null)
@@ -117,6 +125,18 @@ public static class SessionJournalToolEvidenceReader
                     continue;
                 }
 
+                if (type == "task_complete")
+                {
+                    if (payload["error"] is JsonNode error)
+                    {
+                        taskCompleteError = error.DeepClone();
+                        taskCompleteErrorMessage = StringValue(error is JsonObject errorObject ? errorObject["message"] : null)
+                            ?? StringValue(error)
+                            ?? error.ToJsonString();
+                    }
+                    continue;
+                }
+
                 var callId = StringValue(payload["call_id"]);
                 if (string.IsNullOrWhiteSpace(callId))
                 {
@@ -128,37 +148,47 @@ public static class SessionJournalToolEvidenceReader
                     var call = new MutableCall(
                         StringValue(payload["id"]),
                         callId,
-                        StringValue(payload["name"]) ?? "Unknown");
+                        StringValue(payload["name"]) ?? "Unknown",
+                        StringValue(payload["arguments"]) ?? payload["arguments"]?.ToJsonString());
                     if (outputsBeforeCalls.Remove(callId, out var priorOutput))
                     {
-                        call.Output = priorOutput;
+                        call.Output = priorOutput.Text;
+                        call.OutputItemId = priorOutput.ItemId;
                     }
 
                     calls[callId] = call;
                 }
                 else if (type == "function_call_output")
                 {
-                    var output = StringValue(payload["output"]);
+                    var output = StringValue(payload["output"]) ?? payload["output"]?.ToJsonString();
+                    var outputItemId = StringValue(payload["id"]);
                     if (calls.TryGetValue(callId, out var call))
                     {
                         call.Output = output;
+                        call.OutputItemId = outputItemId;
                     }
                     else if (output is not null)
                     {
-                        outputsBeforeCalls[callId] = output;
+                        outputsBeforeCalls[callId] = new JournalOutput(outputItemId, output);
                     }
                 }
             }
 
             var result = calls.Values
-                .Select(call => new SessionJournalToolCall(call.ItemId, call.CallId, call.ToolName, call.Output))
+                .Select(call => new SessionJournalToolCall(call.ItemId, call.CallId, call.ToolName, call.Output)
+                {
+                    Arguments = call.Arguments,
+                    OutputItemId = call.OutputItemId
+                })
                 .ToArray();
             return new SessionJournalToolReadResult(
                 result,
                 malformedRecord ? "partial" : "read",
                 malformedRecord ? "Some journal records were malformed; missing outcomes remain Unknown." : null)
             {
-                ModelContextWindow = modelContextWindow
+                ModelContextWindow = modelContextWindow,
+                TaskCompleteErrorMessage = taskCompleteErrorMessage,
+                TaskCompleteError = taskCompleteError
             };
         }
         catch (IOException)
@@ -217,11 +247,15 @@ public static class SessionJournalToolEvidenceReader
         return null;
     }
 
-    private sealed class MutableCall(string? itemId, string callId, string toolName)
+    private sealed record JournalOutput(string? ItemId, string Text);
+
+    private sealed class MutableCall(string? itemId, string callId, string toolName, string? arguments)
     {
         public string? ItemId { get; } = itemId;
         public string CallId { get; } = callId;
         public string ToolName { get; } = toolName;
+        public string? Arguments { get; } = arguments;
         public string? Output { get; set; }
+        public string? OutputItemId { get; set; }
     }
 }

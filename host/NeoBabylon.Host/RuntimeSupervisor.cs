@@ -2967,7 +2967,8 @@ public sealed class RuntimeSupervisor : IAsyncDisposable
                         ["text"] = page.Text,
                         ["nextOffset"] = page.NextOffset,
                         ["hasMore"] = page.HasMore,
-                        ["upstreamTruncated"] = page.UpstreamTruncated
+                        ["upstreamTruncated"] = page.UpstreamTruncated,
+                        ["omittedParts"] = page.OmittedParts
                     };
                 }
 
@@ -3144,6 +3145,17 @@ public sealed class RuntimeSupervisor : IAsyncDisposable
         var journalToolDiagnostics = TurnDiagnostics.ExtractSessionJournal(journalEvidence.Calls);
         var toolDiagnostics = TurnDiagnostics.Combine(notificationToolDiagnostics, journalToolDiagnostics);
         var hostFailure = BuildHostFailure(observation, toolDiagnostics);
+        var providerTurnFailure = journalEvidence.TaskCompleteErrorMessage is { Length: > 0 } providerError
+            ? new JsonObject
+            {
+                ["type"] = "providerTurnFailure",
+                ["attributedTo"] = string.Equals(capability.ProviderId, "openrouter", StringComparison.OrdinalIgnoreCase)
+                    ? "OpenRouter upstream (App Server task_complete.error)"
+                    : $"{capability.ProviderDisplayName} upstream (App Server task_complete.error)",
+                ["message"] = providerError,
+                ["details"] = journalEvidence.TaskCompleteError?.DeepClone()
+            }
+            : null;
         var toolOutcomeStatus = TurnDiagnostics.OutcomeStatus(toolDiagnostics);
         var continuingCommandEvidence = observation.Interrupted
             ? await BuildContinuingCommandEvidenceAsync(
@@ -3177,6 +3189,7 @@ public sealed class RuntimeSupervisor : IAsyncDisposable
             ["completed"] = observation.Completed,
             ["interrupted"] = observation.Interrupted,
             ["failure"] = hostFailure,
+            ["providerTurnFailure"] = providerTurnFailure,
             ["toolDiagnostics"] = toolDiagnostics,
             ["toolFailureObserved"] = TurnDiagnostics.HasFailure(toolDiagnostics),
             ["toolOutcomeStatus"] = toolOutcomeStatus,

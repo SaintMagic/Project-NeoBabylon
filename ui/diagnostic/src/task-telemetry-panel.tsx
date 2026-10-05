@@ -42,13 +42,13 @@ export const TaskTelemetryPanel = memo(function TaskTelemetryPanel({ telemetry, 
     <section className="live-metrics" aria-labelledby="live-metrics-heading">
       <header className="telemetry-heading"><h3 id="live-metrics-heading">Live metrics</h3></header>
       <dl className="telemetry-grid">
-        <div><dt>Throughput</dt><dd>{formatRate(telemetry.turnAverage)}</dd><small>OBSERVED TURN AVERAGE</small></div>
-        <div><dt>Average active</dt><dd>{formatRate(telemetry.weightedAverage)}</dd><small>{telemetry.measuredTurns} measured turns · time weighted</small></div>
+        <div><dt title="Codex-attributed output tokens divided by elapsed turn time, in tokens per second.">Throughput</dt><dd>{formatRate(telemetry.turnAverage)}</dd><small>OBSERVED OUTPUT RATE · TOKENS/SECOND</small></div>
+        <div><dt title="Total selected-model output tokens divided by the sum of measured turn durations.">Selected model average</dt><dd>{formatRate(telemetry.weightedAverage)}</dd><small>{telemetry.measuredTurns} completed turns · time weighted</small></div>
         <div><dt>Tokens spent</dt><dd>{formatCount(total?.totalTokens)}</dd><small>{formatCount(total?.inputTokens)} input · {formatCount(total?.outputTokens)} output</small></div>
         <div><dt>Cache read</dt><dd>{formatCount(total?.cachedInputTokens)}</dd><small>{formatCount(total?.cacheWriteInputTokens)} written</small></div>
         <div className="telemetry-cost"><dt>Provider cost</dt><dd>Unknown</dd><small>Billing not reported; price is not actual cost</small></div>
       </dl>
-      <p className="telemetry-source">Rates: Codex output-count delta ÷ measured turn interval, including waiting/tools. Current host selection only; restored turns are not timed.</p>
+      <p className="telemetry-source">Rates use Codex-attributed output tokens ÷ measured elapsed turn time, including waiting and tools. This is observed end-to-end output rate, not provider or hardware decode TPS. Restored measurements use exact completed-turn usage and journal duration; provider metadata stays Unknown when absent.</p>
       <p className="telemetry-source" title={telemetry.usageSource ?? undefined}>Spend/cache: {telemetry.usageSource ? "Codex reported · thread-lifetime totals (all models)" : "Unknown · no attributable usage"}</p>
       <figure className="telemetry-history">
         <svg viewBox="0 0 300 66" role="img" aria-label="90-second history of observed completed turn averages; gaps indicate unavailable evidence">

@@ -50,10 +50,17 @@ They do not qualify the full product, live reasoning controls/compaction,
 generation throughput, all recovery/approval paths or current provider routes.
 The native window contains a saved chat, not an empty disposable QA fixture.
 
-Feature work is paused. Throughput clarity, visible/restored provider reasoning
-and useful tool-card details remain unimplemented follow-ups. Callable generated
-tools, deferred qualifications, performance acceptance thresholds, installation
-and packaging remain outside verified completion.
+The subsequent parity patches and bounded UI corrections add readable reasoning
+and summary labels, user bubbles, lossless streamed whitespace, message copying,
+conversation-width preferences, meaningful tool details and scrollable retained
+output. Completed-turn output rates are measured end-to-end, not provider-native
+decode TPS. Completed turns with failed tools retain a nonfatal warning rather
+than being labelled failed generation. See the dated verification entries for
+the exact scope and evidence; these changes are not product-release acceptance.
+Provider-native TPS, the specific provider-error cause on restored history,
+broader parity qualifications, callable generated-tool qualification, deferred
+qualifications, performance acceptance thresholds, installation and packaging
+remain outside verified completion.
 Review also found an inspection-only limitation with a nondefault
 `Launch-Development.ps1 -BuildOutputRoot`: NVIDIA bundle resolution still uses
 the default app build root. The default layout is aligned; custom-root NVIDIA

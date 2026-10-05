@@ -1,3 +1,8 @@
+// Stream chunks are content, not labels: whitespace is meaningful.
+export function assistantDeltaText(value) {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 export function createAssistantDeltaBatcher({ schedule, cancel, onBatch, delayMs = 200 }) {
   const pending = new Map();
   let timer = null;

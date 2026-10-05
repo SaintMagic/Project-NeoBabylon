@@ -257,11 +257,11 @@ try {
             && entry.capabilityRecord.modelIdentifier === message.modelIdentifier)?.capabilityRecord;
           if (!record) throw new Error("fixture refused an unknown capability binding");
           state.selectedCapability = record;
-          return { capabilityRecord: record };
+          return { capabilityRecord: record, threadId: state.activeThreadId };
         }
         case "resumeThread": return {
           threadId: message.threadId, cwd: state.selectedWorkspace, modelProvider: "lmstudio", model: "duplicate-id",
-          executionEligible: true, turns: [],
+          capabilityRecord: records[0].capabilityRecord, executionEligible: true, turns: [],
         };
         case "newTask": state.activeThreadId = null; return {};
         case "startThread":
@@ -345,7 +345,7 @@ try {
 
   const search = page.getByRole("searchbox", { name: "Search loaded conversations" });
   await search.fill("Saved Beta");
-  const savedBeta = page.getByRole("button", { name: /Saved Beta accessibility task/ });
+  const savedBeta = page.locator("button.saved-chat").filter({ hasText: "Saved Beta accessibility task" });
   await savedBeta.focus();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => window.__qaAccessibilityState.requests.some((request) => request.operation === "resumeThread"));
@@ -377,11 +377,11 @@ try {
   await composer.fill("Accessibility UI fixture only");
   await composer.press("Enter");
   await page.getByRole("alert").filter({ hasText: "ordinary command failed in this UI fixture" }).waitFor();
-  await page.getByRole("status", { name: "cmd /c ver, failed, Codex App Server" }).waitFor();
+  await page.getByRole("group", { name: "cmd /c ver, failed, Codex App Server" }).waitFor();
   const approvalRegion = page.getByRole("region", { name: "Command approval" });
   await approvalRegion.waitFor();
   await auditContrast("dark-failure-and-approval");
-  await approvalRegion.getByRole("button", { name: "Deny", exact: true }).focus();
+  await approvalRegion.getByRole("button", { name: "Deny for Command approval, request 71", exact: true }).focus();
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => window.__qaAccessibilityState.requests.some((request) =>
     request.operation === "respondToApproval" && request.decision === "decline"));
@@ -401,8 +401,11 @@ try {
   assert.equal(await reviewContent.evaluate((element) => document.activeElement === element), true,
     "Tab should reach the named keyboard stop for scrollable review content");
   await page.keyboard.press("Tab");
+  assert.equal(await reviewContent.locator("pre[tabindex='0']").evaluate((element) => document.activeElement === element), true,
+    "Tab should reach the separately scrollable diff");
+  await page.keyboard.press("Tab");
   assert.equal(await reviewDone.evaluate((element) => document.activeElement === element), true,
-    "Tab should move from review content to Done");
+    "Tab should move from the diff to Done");
   await page.keyboard.press("Tab");
   assert.equal(await reviewDialog.locator("button").first().evaluate((element) => document.activeElement === element), true,
     "Tab at the last review control should wrap to the first");
@@ -418,8 +421,8 @@ try {
   const unknownStatusComposer = page.getByRole("textbox", { name: "Message NeoBabylon" });
   await unknownStatusComposer.fill("Unknown activity status fixture only");
   await unknownStatusComposer.press("Enter");
-  await page.getByRole("status", { name: "unknown status fixture command, info, Codex App Server" }).waitFor();
-  assert.equal(await page.getByRole("status", { name: "unknown status fixture command, succeeded, Codex App Server" }).count(), 0,
+  await page.getByRole("group", { name: "unknown status fixture command, info, Codex App Server" }).waitFor();
+  assert.equal(await page.getByRole("group", { name: "unknown status fixture command, succeeded, Codex App Server" }).count(), 0,
     "an unknown App Server tool status must not be shown as success");
 
   const diagnosticsButton = page.getByRole("button", { name: "Open diagnostics" });
@@ -478,8 +481,6 @@ try {
   assert.ok(await page.getByRole("status").filter({ hasText: "Turn interrupted" }).count() > 0,
     "the deterministic stop path should show an attributed interrupted status");
 
-  assert.deepEqual(consoleErrors, [], "browser console should stay error-free");
-  assert.deepEqual(externalRequests, [], "the deterministic UI qualification must not contact a provider or external site");
   const requestSummary = await page.evaluate(() => window.__qaAccessibilityState.requests.map((request) => ({
     operation: request.operation,
     providerId: request.providerId,
@@ -487,6 +488,12 @@ try {
     workspacePath: request.workspacePath,
     decision: request.decision,
   })));
+  if (process.argv.includes("--product-parity")) {
+    const { verifyProductParityUi } = await import("./product-parity-ui-checks.mjs");
+    await verifyProductParityUi(page, runRoot);
+  }
+  assert.deepEqual(consoleErrors, [], "browser console should stay error-free");
+  assert.deepEqual(externalRequests, [], "the deterministic UI qualification must not contact a provider or external site");
   assert.ok(requestSummary.some((request) => request.operation === "startTurn"), "expected a mocked task send");
   const evidence = {
     kind: "deterministic UI accessibility fixture; not live inference or real App Server",

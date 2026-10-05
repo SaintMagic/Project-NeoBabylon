@@ -110,3 +110,27 @@ test("transcript projection enforces the total text ceiling and carries omission
   assert.equal(notice.transcriptWindowOmission.omittedEntries, 1);
   assert.ok(next.reduce((total, message) => total + message.text.length, 0) <= 500_000);
 });
+
+test("explicit assistant item identities are not merged by equal text", () => {
+  const first = { id: "agent-1", role: "assistant", text: "Done.", turnId: "turn-1" };
+  const next = upsertAssistantMessage([first], "Done.", false, false, "agent-2", undefined, "turn-1");
+  assert.deepEqual(next.map(message => message.id), ["agent-1", "agent-2"]);
+  const repeated = upsertAssistantMessage(next, "Done.", false, false, "agent-2", undefined, "turn-1");
+  assert.equal(repeated.length, 2, "a repeated completion of the same item is idempotent");
+});
+
+test("a fallback completion never overwrites an earlier user turn", () => {
+  const first = upsertAssistantMessage([{ id: "user-1", role: "user", text: "First" }], "Done.", false);
+  const next = upsertAssistantMessage([...first, { id: "user-2", role: "user", text: "Second" }], "Done.", false);
+  assert.equal(next.length, 4);
+  assert.equal(next[1].text, "Done.");
+  assert.notEqual(next[1].id, next[3].id);
+});
+
+test("fallback deduplication respects known thread and turn identity", () => {
+  const first = { id: "agent-1", role: "assistant", text: "Done.", turnId: "turn-1", threadId: "thread-1" };
+  const next = upsertAssistantMessage([first], "Done.", false, false, undefined, undefined, "turn-2", "thread-1");
+  assert.equal(next.length, 2);
+  assert.equal(next[0].turnId, "turn-1");
+  assert.equal(next[1].turnId, "turn-2");
+});
