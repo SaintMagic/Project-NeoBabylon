@@ -26,7 +26,9 @@ jobs:
           root = pathlib.Path(".")
           transfer_dir = root / ".github" / "parity-2-transfer"
           transfer = "".join((transfer_dir / f"part{i}.b64").read_text() for i in range(3))
-          transfer = "".join(transfer.split())\n          transfer += "=" * (-len(transfer) % 4)\n          raw = gzip.decompress(base64.b64decode(transfer))
+          transfer = "".join(transfer.split())
+          transfer += "=" * (-len(transfer) % 4)
+          raw = gzip.decompress(base64.b64decode(transfer))
           files = json.loads(raw)
           package = root / "NeoBabylon_Codex_Parity_Review_2_2026-10-05"
           package.mkdir(exist_ok=True)
